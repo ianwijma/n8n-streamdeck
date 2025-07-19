@@ -1,0 +1,187 @@
+name: E2E Tests
+
+on:
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'apps/frontend/**'
+      - 'apps/backend/**'
+      - 'packages/**'
+      - '.github/workflows/e2e.yml'
+  workflow_dispatch:
+    inputs:
+      browser:
+        description: 'Browser to run tests on'
+        required: false
+        default: 'chromium'
+        type: choice
+        options:
+          - chromium
+          - firefox
+          - webkit
+          - all
+      test_pattern:
+        description: 'Test pattern to run (optional)'
+        required: false
+        default: ''
+        type: string
+
+env:
+  NODE_VERSION: '18'
+  PNPM_VERSION: '8'
+
+jobs:
+  e2e-tests:
+    name: E2E Tests (${{ matrix.browser }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: ${{ github.event.inputs.browser == 'all' && fromJSON('["chromium", "firefox", "webkit"]') || fromJSON(format('["{0}"]', github.event.inputs.browser || 'chromium')) }}
+
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v3
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: |
+          cd apps/frontend
+          npx playwright install --with-deps ${{ matrix.browser }}
+
+      - name: Build packages
+        run: pnpm build
+
+      - name: Run E2E tests
+        run: |
+          cd apps/frontend
+          if [ -n "${{ github.event.inputs.test_pattern }}" ]; then
+            npx playwright test ${{ github.event.inputs.test_pattern }} --project=${{ matrix.browser }} --reporter=github
+          else
+            npx playwright test --project=${{ matrix.browser }} --reporter=github
+          fi
+        env:
+          NODE_ENV: test
+          REDIS_URL: redis://localhost:6379
+          CI: true
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: e2e-results-${{ matrix.browser }}
+          path: |
+            apps/frontend/test-results/
+            apps/frontend/playwright-report/
+          retention-days: 7
+
+      - name: Upload screenshots
+        uses: actions/upload-artifact@v3
+        if: failure()
+        with:
+          name: e2e-screenshots-${{ matrix.browser }}
+          path: apps/frontend/test-results/screenshots/
+          retention-days: 7
+
+  e2e-summary:
+    name: E2E Test Summary
+    runs-on: ubuntu-latest
+    needs: e2e-tests
+    if: always()
+    steps:
+      - name: Check test results
+        run: |
+          if [ "${{ needs.e2e-tests.result }}" = "success" ]; then
+            echo "✅ All E2E tests passed!"
+            echo "## E2E Test Results ✅" >> $GITHUB_STEP_SUMMARY
+            echo "All E2E tests completed successfully across all browsers." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Some E2E tests failed!"
+            echo "## E2E Test Results ❌" >> $GITHUB_STEP_SUMMARY
+            echo "Some E2E tests failed. Please check the test artifacts for details." >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+
+  # Smoke tests for quick feedback
+  smoke-tests:
+    name: Smoke Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: |
+          cd apps/frontend
+          npx playwright install --with-deps chromium
+
+      - name: Build packages
+        run: pnpm build
+
+      - name: Run smoke tests
+        run: |
+          cd apps/frontend
+          npx playwright test smoke.spec.ts --project=chromium --reporter=github
+        env:
+          NODE_ENV: test
+          CI: true
+
+      - name: Upload smoke test results
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: smoke-test-results
+          path: |
+            apps/frontend/test-results/
+          retention-days: 3
