@@ -7,8 +7,7 @@ import {
 import { config } from '../config/environment';
 import { asyncHandler } from '../middleware/errorHandler';
 import { performanceMonitor } from '../services/performanceMonitor';
-import { cacheService } from '../services/cacheService';
-import { StreamDeckService } from '../services/streamDeckService';
+import { metricsCollector } from '../services/metricsCollector';
 
 const router = Router();
 const logger = new Logger({ level: config.logLevel }, 'HealthRoute');
@@ -229,6 +228,134 @@ router.get(
         },
       },
       'Performance metrics retrieved',
+      req.requestId
+    );
+
+    res.json(response);
+  })
+);
+
+// System metrics endpoint
+router.get(
+  '/system',
+  asyncHandler(async (req: Request, res: Response) => {
+    const systemMetrics = metricsCollector.getSystemMetrics();
+    const applicationMetrics = metricsCollector.getApplicationMetrics();
+
+    const response = createSuccessResponse(
+      {
+        timestamp: new Date().toISOString(),
+        system: systemMetrics,
+        application: applicationMetrics,
+      },
+      'System metrics retrieved',
+      req.requestId
+    );
+
+    res.json(response);
+  })
+);
+
+// Alerts endpoint
+router.get(
+  '/alerts',
+  asyncHandler(async (req: Request, res: Response) => {
+    const activeAlerts = metricsCollector.getActiveAlerts();
+    const alertThresholds = metricsCollector.getAlertThresholds();
+
+    const response = createSuccessResponse(
+      {
+        timestamp: new Date().toISOString(),
+        activeAlerts: activeAlerts.map((alert) => ({
+          ...alert.threshold,
+          triggeredAt: new Date(alert.since).toISOString(),
+          duration: Date.now() - alert.since,
+        })),
+        thresholds: alertThresholds,
+        summary: {
+          totalAlerts: activeAlerts.length,
+          criticalAlerts: activeAlerts.filter(
+            (a) => a.threshold.severity === 'critical'
+          ).length,
+          highAlerts: activeAlerts.filter(
+            (a) => a.threshold.severity === 'high'
+          ).length,
+          mediumAlerts: activeAlerts.filter(
+            (a) => a.threshold.severity === 'medium'
+          ).length,
+          lowAlerts: activeAlerts.filter((a) => a.threshold.severity === 'low')
+            .length,
+        },
+      },
+      'Alert status retrieved',
+      req.requestId
+    );
+
+    res.json(response);
+  })
+);
+
+// Dashboard endpoint - comprehensive status
+router.get(
+  '/dashboard',
+  asyncHandler(async (req: Request, res: Response) => {
+    const systemMetrics = metricsCollector.getSystemMetrics();
+    const applicationMetrics = metricsCollector.getApplicationMetrics();
+    const activeAlerts = metricsCollector.getActiveAlerts();
+    const since = Date.now() - 300000; // Last 5 minutes
+    const recentMetrics = metricsCollector.getMetrics(undefined, since);
+
+    // Calculate health score based on various factors
+    let healthScore = 100;
+
+    // Deduct points for high resource usage
+    if (systemMetrics.memory.percentage > 85) healthScore -= 20;
+    if (systemMetrics.cpu.usage > 90) healthScore -= 20;
+
+    // Deduct points for active alerts
+    healthScore -= activeAlerts.length * 10;
+
+    // Deduct points for error rates
+    if (applicationMetrics.requests.errorRate > 5) healthScore -= 15;
+
+    healthScore = Math.max(0, healthScore);
+
+    const status =
+      healthScore >= 80
+        ? 'healthy'
+        : healthScore >= 60
+          ? 'degraded'
+          : healthScore >= 40
+            ? 'unhealthy'
+            : 'critical';
+
+    const response = createSuccessResponse(
+      {
+        timestamp: new Date().toISOString(),
+        status,
+        healthScore,
+        uptime: process.uptime(),
+        system: systemMetrics,
+        application: applicationMetrics,
+        alerts: {
+          active: activeAlerts.length,
+          critical: activeAlerts.filter(
+            (a) => a.threshold.severity === 'critical'
+          ).length,
+          recent: recentMetrics.filter((m) => m.name.includes('alert')).length,
+        },
+        performance: {
+          responseTime: Date.now() - Date.now(), // This would be calculated properly
+          throughput: applicationMetrics.requests.rate,
+          errorRate: applicationMetrics.requests.errorRate,
+        },
+        services: {
+          database: await checkDatabaseConnection(),
+          n8n: await checkN8NConnection(),
+          streamdeck: await checkStreamDeckConnection(),
+        },
+      },
+      'Dashboard data retrieved',
       req.requestId
     );
 

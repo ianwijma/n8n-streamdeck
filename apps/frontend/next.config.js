@@ -9,7 +9,7 @@ const nextConfig = {
   },
 
   // Bundle optimization
-  webpack: (config, { dev, isServer }) => {
+  webpack: (config, { dev }) => {
     // Production optimizations
     if (!dev) {
       // Enable tree shaking

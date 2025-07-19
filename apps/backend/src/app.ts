@@ -19,6 +19,7 @@ import devicesRoutes from './routes/devices';
 import buttonsRoutes from './routes/buttons';
 import deviceButtonsRoutes from './routes/deviceButtons';
 import configRoutes from './routes/config';
+import errorsRoutes from './routes/errors';
 import { authRouter, authMiddleware } from './routes/auth';
 
 const logger = new Logger({ level: config.logLevel }, 'App');
@@ -75,6 +76,9 @@ export const createApp = (): Application => {
   // Health check endpoint (before other routes for quick access)
   app.use('/health', healthRoutes);
   app.use('/api/health', healthRoutes);
+
+  // Error reporting endpoints (public access for client error reporting)
+  app.use('/api/errors', errorsRoutes);
 
   // Authentication routes (before protected routes)
   app.use('/api/auth', authRouter);

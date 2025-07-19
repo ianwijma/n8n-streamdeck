@@ -34,7 +34,7 @@ export class StreamDeckService extends EventEmitter {
   private connectedDevices: Map<string, StreamDeckDevice> = new Map();
   private deviceInfo: Map<string, Device> = new Map();
   private reconnectTimers: Map<string, NodeJS.Timeout> = new Map();
-  private connectionPool: Map<string, StreamDeckDevice[]> = new Map();
+  private _connectionPool: Map<string, StreamDeckDevice[]> = new Map();
   private connectionQueue: Map<string, Promise<StreamDeckDevice>> = new Map();
   private options: StreamDeckServiceOptions;
   private mockDevices: Map<string, Device> = new Map(); // For testing
@@ -459,7 +459,7 @@ export class StreamDeckService extends EventEmitter {
   /**
    * Get or create a pooled connection
    */
-  private async getPooledConnection(
+  private async _getPooledConnection(
     deviceId: string
   ): Promise<StreamDeckDevice> {
     // Check if we have an existing connection
@@ -515,7 +515,7 @@ export class StreamDeckService extends EventEmitter {
   /**
    * Handle device disconnection
    */
-  private handleDeviceDisconnection(
+  private _handleDeviceDisconnection(
     deviceId: string,
     reason: 'user-disconnect' | 'cable-unplugged' | 'error' | 'timeout'
   ): void {

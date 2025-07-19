@@ -132,10 +132,10 @@ function recordErrorMetrics(error: CustomAppError, req: Request): void {
 
 // Enhanced error handling middleware
 export const errorHandler = (
-  error: Error | AppError | CustomAppError,
+  error: Error,
   req: Request,
   res: Response,
-  next: NextFunction
+  _next: NextFunction
 ): void => {
   let statusCode = HttpStatusCode.INTERNAL_SERVER_ERROR;
   let apiError: ApiError;
@@ -251,7 +251,7 @@ export const errorHandler = (
 // Enhanced 404 handler for unmatched routes
 export const notFoundHandler = (
   req: Request,
-  res: Response,
+  _res: Response,
   next: NextFunction
 ): void => {
   // Log potential security scanning attempts

@@ -43,7 +43,7 @@ export class ErrorBoundary extends Component<Props, State> {
     return {
       hasError: true,
       error,
-      errorId: `error_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      errorId: `error_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
     };
   }
 
@@ -55,7 +55,7 @@ export class ErrorBoundary extends Component<Props, State> {
     const errorContext = {
       ...this.props.context,
       level: this.props.level || 'component',
-      componentStack: errorInfo.componentStack,
+      componentStack: errorInfo.componentStack || undefined,
       errorBoundary: this.constructor.name,
       retryCount: this.retryCount,
       timestamp: new Date().toISOString(),
