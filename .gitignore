@@ -104,3 +104,17 @@ temp/
 ehthumbs.db
 Thumbs.db
 /apps/frontend/storybook-static/
+
+# Deployment files
+docker-compose*.yml
+Dockerfile*
+nginx/
+scripts/deploy.sh
+scripts/backup.sh
+scripts/rollback.sh
+DEPLOYMENT.md
+ERROR_HANDLING_RUNBOOK.md
+PERFORMANCE.md
+
+# Compressed files
+*.gz
