@@ -29,25 +29,19 @@ const config: StorybookConfig = {
     },
   },
   webpackFinal: async (config) => {
-    // Mock the hooks for Storybook using webpack's NormalModuleReplacementPlugin
+    // Mock the hooks for Storybook using webpack aliases
     const path = require('path');
-    const webpack = require('webpack');
 
-    config.plugins = config.plugins || [];
-    config.plugins.push(
-      new webpack.NormalModuleReplacementPlugin(
-        /src\/hooks\/useButtons$/,
-        path.resolve(__dirname, 'mocks/hooks.js')
-      ),
-      new webpack.NormalModuleReplacementPlugin(
-        /src\/hooks\/useDevices$/,
-        path.resolve(__dirname, 'mocks/hooks.js')
-      ),
-      new webpack.NormalModuleReplacementPlugin(
-        /src\/hooks\/useRealTimeEvents$/,
-        path.resolve(__dirname, 'mocks/hooks.js')
-      )
-    );
+    const mockPath = path.resolve(__dirname, 'mocks/hooks.js');
+
+    config.resolve = config.resolve || {};
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      // Mock the hooks with absolute paths
+      '@/hooks/useButtons': mockPath,
+      '@/hooks/useDevices': mockPath,
+      '@/hooks/useRealTimeEvents': mockPath,
+    };
 
     return config;
   },

@@ -2,40 +2,15 @@ import type { Preview } from '@storybook/nextjs';
 import '../src/app/globals.css';
 import { withQueryClient, withMockData, withContainer } from './decorators';
 
-// Mock the hooks for Storybook
-const mockHooks = {
-  useButtons: () => ({
-    data: [],
-    isLoading: false,
-    error: null,
-  }),
-  useUpdateButton: () => ({
-    mutateAsync: () => Promise.resolve(),
-    isPending: false,
-  }),
-  useDeleteButton: () => ({
-    mutateAsync: () => Promise.resolve(),
-    isPending: false,
-  }),
-  useConnectDevice: () => ({
-    mutateAsync: () => Promise.resolve(),
-    isPending: false,
-  }),
-  useDisconnectDevice: () => ({
-    mutateAsync: () => Promise.resolve(),
-    isPending: false,
-  }),
-  useDevices: () => ({
-    data: [],
-    isLoading: false,
-    error: null,
-  }),
-  useRealTimeEvents: () => ({}),
-};
-
-// Set up global mocks for Storybook
+// Mock Socket.io to prevent WebSocket connections in Storybook
 if (typeof window !== 'undefined') {
-  (window as any).__STORYBOOK_HOOKS__ = mockHooks;
+  (window as any).io = () => ({
+    on: () => {},
+    off: () => {},
+    emit: () => {},
+    disconnect: () => {},
+    connected: false,
+  });
 }
 
 const preview: Preview = {

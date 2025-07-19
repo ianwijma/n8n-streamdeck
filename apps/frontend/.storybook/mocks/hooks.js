@@ -86,6 +86,8 @@ const mockButtons = [
 
 // Mock hooks for Storybook with realistic data
 export const useButtons = (deviceId) => {
+  console.log('🎭 MOCK: useButtons called with deviceId:', deviceId);
+
   // Always return buttons for the mock device, regardless of deviceId
   const filteredButtons = deviceId
     ? mockButtons.filter(
@@ -93,6 +95,8 @@ export const useButtons = (deviceId) => {
           button.deviceId === deviceId || button.deviceId === 'test-device-1'
       )
     : mockButtons;
+
+  console.log('🎭 MOCK: useButtons returning data:', filteredButtons);
 
   return {
     data: filteredButtons,
@@ -166,4 +170,20 @@ export const useRealTimeEvents = (options = {}) => {
   // Mock real-time events setup - just return empty object
   // In a real implementation, this would set up socket listeners
   return {};
+};
+
+// Note: Can't use export * from in this context since we're in a .js file
+// All exports are defined above
+
+// Also provide default exports for compatibility
+export default {
+  useButtons,
+  useUpdateButton,
+  useDeleteButton,
+  useCreateButton,
+  useDevices,
+  useConnectDevice,
+  useDisconnectDevice,
+  useScanDevices,
+  useRealTimeEvents,
 };

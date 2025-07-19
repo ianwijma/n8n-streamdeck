@@ -30,63 +30,85 @@ interface UseRealTimeEventsOptions {
 }
 
 export function useRealTimeEvents(options: UseRealTimeEventsOptions = {}) {
-  const socketRef = useRef<Socket | null>(null);
   const queryClient = useQueryClient();
+  const socketRef = useRef<Socket | null>(null);
 
-  const {
-    onDeviceConnected,
-    onDeviceDisconnected,
-    onButtonPressed,
-    onButtonReleased,
-  } = options;
+  // Check if we're in Storybook environment
+  const isStorybook =
+    typeof window !== 'undefined' &&
+    (window.location.pathname.includes('iframe.html') ||
+      window.parent !== window ||
+      (window as any).__STORYBOOK_ADDONS_CHANNEL__ ||
+      window.location.port === '6006');
 
   const handleDeviceEvent = useCallback(
-    (event: DeviceEvent) => {
+    (event: DeviceEvent | DeviceConnectionEvent | ButtonPressEvent | any) => {
+      console.log('Received device event:', event);
+
       switch (event.type) {
         case 'device-connected':
-          queryClient.invalidateQueries({ queryKey: ['devices'] });
-          onDeviceConnected?.(event.deviceId);
-          break;
-
         case 'device-disconnected':
-          queryClient.invalidateQueries({ queryKey: ['devices'] });
-          onDeviceDisconnected?.(event.deviceId);
+          // Invalidate device queries to refetch updated data
+          queryClient.invalidateQueries({ queryKey: deviceKeys.all });
+
+          const connectionEvent = event as DeviceConnectionEvent;
+          if (event.type === 'device-connected') {
+            options.onDeviceConnected?.(event.deviceId, connectionEvent.device);
+          } else {
+            options.onDeviceDisconnected?.(
+              event.deviceId,
+              connectionEvent.device
+            );
+          }
           break;
 
         case 'button-pressed':
-          if (event.buttonPosition !== undefined) {
-            onButtonPressed?.(event.deviceId, event.buttonPosition);
-          }
+          const pressEvent = event as ButtonPressEvent;
+          options.onButtonPressed?.(
+            event.deviceId,
+            pressEvent.buttonPosition,
+            pressEvent.button
+          );
           break;
 
         case 'button-released':
-          if (event.buttonPosition !== undefined) {
-            onButtonReleased?.(event.deviceId, event.buttonPosition);
-          }
+          const releaseEvent = event as ButtonPressEvent;
+          options.onButtonReleased?.(
+            event.deviceId,
+            releaseEvent.buttonPosition,
+            releaseEvent.button
+          );
           break;
+
+        case 'button:updated':
+          // Invalidate button queries to refetch updated data
+          queryClient.invalidateQueries({ queryKey: buttonKeys.all });
+          break;
+
+        default:
+          console.warn('Unknown device event type:', event);
       }
     },
-    [
-      queryClient,
-      onDeviceConnected,
-      onDeviceDisconnected,
-      onButtonPressed,
-      onButtonReleased,
-    ]
+    [queryClient, options]
   );
-
   useEffect(() => {
-    const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:3001';
+    // Skip WebSocket connection in Storybook
+    if (isStorybook) {
+      console.log('Skipping WebSocket connection in Storybook');
+      return;
+    }
 
-    socketRef.current = io(wsUrl, {
+    // Create socket connection
+    const socket = io('http://localhost:3001', {
       transports: ['websocket'],
       autoConnect: true,
     });
 
-    const socket = socketRef.current;
+    socketRef.current = socket;
 
     socket.on('connect', () => {
       console.log('Connected to StreamDeck WebSocket');
+      options.onConnect?.();
     });
 
     socket.on('disconnect', () => {
@@ -103,7 +125,7 @@ export function useRealTimeEvents(options: UseRealTimeEventsOptions = {}) {
       socket.disconnect();
       socketRef.current = null;
     };
-  }, [handleDeviceEvent]);
+  }, [handleDeviceEvent, isStorybook]);
 
   const isConnected = socketRef.current?.connected ?? false;
 
