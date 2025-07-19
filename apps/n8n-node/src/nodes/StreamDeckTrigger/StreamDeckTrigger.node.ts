@@ -4,12 +4,134 @@ import {
   INodePropertyOptions,
   INodeType,
   INodeTypeDescription,
+  ITriggerFunctions,
+  ITriggerResponse,
   IWebhookFunctions,
   IWebhookResponseData,
   NodeConnectionType,
   NodeOperationError,
 } from 'n8n-workflow';
-import axios from 'axios';
+import {
+  StreamDeckApiService,
+  StreamDeckMachine,
+  StreamDeckDevice,
+  StreamDeckButton,
+  ButtonPressEvent,
+} from '../../services/StreamDeckApiService';
+
+async function createTestTriggerData(
+  apiService: StreamDeckApiService,
+  machine: string,
+  deviceId: string,
+  buttonId: string,
+  includeButtonData: boolean,
+  includeDeviceData: boolean,
+  includeMachineData: boolean
+): Promise<IDataObject> {
+  const testData: IDataObject = {
+    event: 'manual_trigger',
+    deviceId,
+    buttonId: buttonId === '*' ? 'test-button' : buttonId,
+    position: 0,
+    timestamp: new Date().toISOString(),
+    machine,
+    isManualTrigger: true,
+  };
+
+  try {
+    // Add additional data if requested
+    if (
+      includeButtonData &&
+      buttonId !== '*' &&
+      !buttonId.startsWith('position:')
+    ) {
+      testData.button = await apiService.getButton(deviceId, buttonId);
+    }
+
+    if (includeDeviceData) {
+      testData.device = await apiService.getDevice(deviceId);
+    }
+
+    if (includeMachineData) {
+      const machines = await apiService.getMachines();
+      testData.machineData = machines.find((m) => m.id === machine);
+    }
+  } catch (error) {
+    // Don't fail manual trigger if additional data can't be loaded
+    testData.dataLoadError =
+      error instanceof Error ? error.message : 'Unknown error';
+  }
+
+  return testData;
+}
+
+async function buildOutputData(
+  apiService: StreamDeckApiService,
+  buttonEvent: ButtonPressEvent,
+  machine: string,
+  includeButtonData: boolean,
+  includeDeviceData: boolean,
+  includeMachineData: boolean,
+  headers: IDataObject,
+  query: IDataObject
+): Promise<IDataObject> {
+  const outputData: IDataObject = {
+    // Core event data
+    event: buttonEvent.event,
+    deviceId: buttonEvent.deviceId,
+    buttonId: buttonEvent.buttonId,
+    position: buttonEvent.position,
+    timestamp: buttonEvent.timestamp,
+    machine,
+
+    // Request metadata
+    headers,
+    query,
+
+    // Processing metadata
+    processedAt: new Date().toISOString(),
+    nodeVersion: '1.0.0',
+  };
+
+  try {
+    // Add button data if requested and available
+    if (includeButtonData) {
+      if (buttonEvent.button) {
+        outputData.button = buttonEvent.button;
+      } else if (buttonEvent.buttonId && buttonEvent.buttonId !== '*') {
+        outputData.button = await apiService.getButton(
+          buttonEvent.deviceId,
+          buttonEvent.buttonId
+        );
+      }
+    }
+
+    // Add device data if requested
+    if (includeDeviceData) {
+      if (buttonEvent.device) {
+        outputData.device = buttonEvent.device;
+      } else {
+        outputData.device = await apiService.getDevice(buttonEvent.deviceId);
+      }
+    }
+
+    // Add machine data if requested
+    if (includeMachineData) {
+      if (buttonEvent.machine) {
+        outputData.machineData = buttonEvent.machine;
+      } else {
+        const machines = await apiService.getMachines();
+        outputData.machineData = machines.find((m) => m.id === machine);
+      }
+    }
+  } catch (error) {
+    // Don't fail the trigger if additional data can't be loaded
+    outputData.dataLoadWarning =
+      error instanceof Error ? error.message : 'Failed to load additional data';
+  }
+
+  return outputData;
+}
 
 export class StreamDeckTrigger implements INodeType {
   description: INodeTypeDescription = {
@@ -103,6 +225,20 @@ export class StreamDeckTrigger implements INodeType {
         description:
           'Whether to include button configuration data in the output',
       },
+      {
+        displayName: 'Include Device Data',
+        name: 'includeDeviceData',
+        type: 'boolean',
+        default: false,
+        description: 'Whether to include device information in the output',
+      },
+      {
+        displayName: 'Include Machine Data',
+        name: 'includeMachineData',
+        type: 'boolean',
+        default: false,
+        description: 'Whether to include machine information in the output',
+      },
     ],
   };
 
@@ -111,66 +247,49 @@ export class StreamDeckTrigger implements INodeType {
       async loadMachines(
         this: ILoadOptionsFunctions
       ): Promise<INodePropertyOptions[]> {
-        const credentials = await this.getCredentials('streamDeckApi');
-        const serverUrl = credentials.serverUrl as string;
-
         try {
-          const response = await axios.get(`${serverUrl}/api/machines`, {
-            headers: {
-              Authorization: credentials.apiKey
-                ? `Bearer ${credentials.apiKey}`
-                : undefined,
-            },
-            timeout: (credentials.timeout as number) || 5000,
-          });
+          const credentials = await this.getCredentials('streamDeckApi');
+          const apiService = new StreamDeckApiService(
+            credentials,
+            this.getNode()
+          );
 
-          const machines = response.data.data || [];
-          return machines.map((machine: any) => ({
-            name: machine.name || machine.hostname || machine.id,
+          const machines = await apiService.getMachines();
+
+          return machines.map((machine: StreamDeckMachine) => ({
+            name: `${machine.name} (${machine.hostname})`,
             value: machine.id,
-            description: `${machine.hostname} - ${machine.platform}`,
+            description: `${machine.platform} - ${machine.status}`,
           }));
         } catch (error) {
-          // Fallback to local machine if API call fails
-          return [
-            {
-              name: 'Local Machine',
-              value: 'local',
-              description: 'Local StreamDeck server',
-            },
-          ];
+          throw new NodeOperationError(
+            this.getNode(),
+            `Failed to load machines: ${error instanceof Error ? error.message : 'Unknown error'}`
+          );
         }
       },
 
       async loadDevices(
         this: ILoadOptionsFunctions
       ): Promise<INodePropertyOptions[]> {
-        const credentials = await this.getCredentials('streamDeckApi');
-        const serverUrl = credentials.serverUrl as string;
-        const machine = this.getCurrentNodeParameter('machine') as string;
-
-        if (!machine) {
-          return [];
-        }
-
         try {
-          const response = await axios.get(`${serverUrl}/api/devices`, {
-            headers: {
-              Authorization: credentials.apiKey
-                ? `Bearer ${credentials.apiKey}`
-                : undefined,
-            },
-            params: {
-              machine: machine !== 'local' ? machine : undefined,
-            },
-            timeout: (credentials.timeout as number) || 5000,
-          });
+          const credentials = await this.getCredentials('streamDeckApi');
+          const apiService = new StreamDeckApiService(
+            credentials,
+            this.getNode()
+          );
+          const machine = this.getCurrentNodeParameter('machine') as string;
 
-          const devices = response.data.data || [];
-          return devices.map((device: any) => ({
+          if (!machine) {
+            return [];
+          }
+
+          const devices = await apiService.getDevices(machine);
+
+          return devices.map((device: StreamDeckDevice) => ({
             name: `${device.name} (${device.model})`,
             value: device.id,
-            description: `${device.serialNumber} - ${device.buttonCount} buttons`,
+            description: `${device.serialNumber} - ${device.buttonCount} buttons - ${device.connected ? 'Connected' : 'Disconnected'}`,
           }));
         } catch (error) {
           throw new NodeOperationError(
@@ -183,28 +302,23 @@ export class StreamDeckTrigger implements INodeType {
       async loadButtons(
         this: ILoadOptionsFunctions
       ): Promise<INodePropertyOptions[]> {
-        const credentials = await this.getCredentials('streamDeckApi');
-        const serverUrl = credentials.serverUrl as string;
-        const deviceId = this.getCurrentNodeParameter('device') as string;
-
-        if (!deviceId) {
-          return [];
-        }
-
         try {
-          const response = await axios.get(
-            `${serverUrl}/api/devices/${deviceId}/buttons`,
-            {
-              headers: {
-                Authorization: credentials.apiKey
-                  ? `Bearer ${credentials.apiKey}`
-                  : undefined,
-              },
-              timeout: (credentials.timeout as number) || 5000,
-            }
+          const credentials = await this.getCredentials('streamDeckApi');
+          const apiService = new StreamDeckApiService(
+            credentials,
+            this.getNode()
           );
+          const deviceId = this.getCurrentNodeParameter('device') as string;
 
-          const buttons = response.data.data || [];
+          if (!deviceId) {
+            return [];
+          }
+
+          const [buttons, device] = await Promise.all([
+            apiService.getButtons(deviceId),
+            apiService.getDevice(deviceId),
+          ]);
+
           const options: INodePropertyOptions[] = [];
 
           // Add option for any button
@@ -215,30 +329,18 @@ export class StreamDeckTrigger implements INodeType {
           });
 
           // Add specific buttons
-          buttons.forEach((button: any) => {
+          buttons.forEach((button: StreamDeckButton) => {
             options.push({
               name: button.title || `Button ${button.position + 1}`,
               value: button.id,
-              description: `Position ${button.position + 1}${button.enabled ? '' : ' (disabled)'}`,
+              description: `Position ${button.position + 1}${button.enabled ? '' : ' (disabled)'}${button.title ? ` - ${button.title}` : ''}`,
             });
           });
 
           // Add empty positions
-          const deviceResponse = await axios.get(
-            `${serverUrl}/api/devices/${deviceId}`,
-            {
-              headers: {
-                Authorization: credentials.apiKey
-                  ? `Bearer ${credentials.apiKey}`
-                  : undefined,
-              },
-              timeout: (credentials.timeout as number) || 5000,
-            }
+          const usedPositions = new Set(
+            buttons.map((b: StreamDeckButton) => b.position)
           );
-
-          const device = deviceResponse.data.data;
-          const usedPositions = new Set(buttons.map((b: any) => b.position));
-
           for (let i = 0; i < device.buttonCount; i++) {
             if (!usedPositions.has(i)) {
               options.push({
@@ -260,7 +362,7 @@ export class StreamDeckTrigger implements INodeType {
     },
   };
 
-  async webhook(this: IWebhookFunctions): Promise<IWebhookResponseData> {
+  async trigger(this: ITriggerFunctions): Promise<ITriggerResponse> {
     const machine = this.getNodeParameter('machine') as string;
     const deviceId = this.getNodeParameter('device') as string;
     const buttonId = this.getNodeParameter('button') as string;
@@ -268,66 +370,151 @@ export class StreamDeckTrigger implements INodeType {
     const includeButtonData = this.getNodeParameter(
       'includeButtonData'
     ) as boolean;
+    const includeDeviceData = this.getNodeParameter(
+      'includeDeviceData'
+    ) as boolean;
+    const includeMachineData = this.getNodeParameter(
+      'includeMachineData'
+    ) as boolean;
 
+    const credentials = await this.getCredentials('streamDeckApi');
+    const apiService = new StreamDeckApiService(credentials, this.getNode());
+
+    const triggerFunctions = this;
+
+    return {
+      manualTriggerFunction: async () => {
+        // Manual trigger for testing
+        const testData = await createTestTriggerData(
+          apiService,
+          machine,
+          deviceId,
+          buttonId,
+          includeButtonData,
+          includeDeviceData,
+          includeMachineData
+        );
+
+        triggerFunctions.emit([
+          [
+            {
+              json: testData,
+            },
+          ],
+        ]);
+      },
+    };
+  }
+
+  async webhook(this: IWebhookFunctions): Promise<IWebhookResponseData> {
     const bodyData = this.getBodyData() as IDataObject;
     const queryData = this.getQueryData() as IDataObject;
     const headersData = this.getHeaderData() as IDataObject;
 
-    // Validate the webhook payload
-    if (!bodyData.event || !bodyData.deviceId) {
+    // Get node parameters from the trigger configuration
+    const machine = this.getNodeParameter('machine') as string;
+    const deviceId = this.getNodeParameter('device') as string;
+    const buttonId = this.getNodeParameter('button') as string;
+    const buttonEvents = this.getNodeParameter('buttonEvents') as string[];
+    const includeButtonData = this.getNodeParameter(
+      'includeButtonData'
+    ) as boolean;
+    const includeDeviceData = this.getNodeParameter(
+      'includeDeviceData'
+    ) as boolean;
+    const includeMachineData = this.getNodeParameter(
+      'includeMachineData'
+    ) as boolean;
+
+    const credentials = await this.getCredentials('streamDeckApi');
+    const apiService = new StreamDeckApiService(credentials, this.getNode());
+
+    try {
+      // Validate webhook payload
+      if (!apiService.validateWebhookPayload(bodyData)) {
+        console.warn('Invalid webhook payload received:', bodyData);
+        return {
+          noWebhookResponse: true,
+        };
+      }
+
+      // Transform raw event data
+      const buttonEvent = apiService.transformButtonPressEvent(bodyData);
+
+      // Filter events based on configuration
+      if (!buttonEvents.includes(buttonEvent.event)) {
+        return {
+          noWebhookResponse: true,
+        };
+      }
+
+      // Filter by device
+      if (deviceId !== '*' && buttonEvent.deviceId !== deviceId) {
+        return {
+          noWebhookResponse: true,
+        };
+      }
+
+      // Filter by button
+      if (
+        buttonId !== '*' &&
+        buttonEvent.buttonId !== buttonId &&
+        !buttonId.startsWith('position:')
+      ) {
+        // Handle position-based filtering
+        if (buttonId.startsWith('position:')) {
+          const expectedPosition = parseInt(buttonId.split(':')[1], 10);
+          if (buttonEvent.position !== expectedPosition) {
+            return {
+              noWebhookResponse: true,
+            };
+          }
+        } else {
+          return {
+            noWebhookResponse: true,
+          };
+        }
+      }
+
+      // Build output data
+      const outputData = await buildOutputData(
+        apiService,
+        buttonEvent,
+        machine,
+        includeButtonData,
+        includeDeviceData,
+        includeMachineData,
+        headersData,
+        queryData
+      );
       return {
-        noWebhookResponse: true,
-      };
-    }
-
-    // Filter events based on configuration
-    if (!buttonEvents.includes(bodyData.event as string)) {
-      return {
-        noWebhookResponse: true,
-      };
-    }
-
-    // Filter by device and button
-    if (deviceId !== '*' && bodyData.deviceId !== deviceId) {
-      return {
-        noWebhookResponse: true,
-      };
-    }
-
-    if (
-      buttonId !== '*' &&
-      bodyData.buttonId !== buttonId &&
-      !bodyData.buttonId?.toString().startsWith('position:')
-    ) {
-      return {
-        noWebhookResponse: true,
-      };
-    }
-
-    const outputData: IDataObject = {
-      event: bodyData.event,
-      deviceId: bodyData.deviceId,
-      buttonId: bodyData.buttonId,
-      position: bodyData.position,
-      timestamp: bodyData.timestamp || new Date().toISOString(),
-      machine,
-      headers: headersData,
-      query: queryData,
-    };
-
-    // Include button data if requested
-    if (includeButtonData && bodyData.button) {
-      outputData.button = bodyData.button;
-    }
-
-    return {
-      workflowData: [
-        [
-          {
-            json: outputData,
-          },
+        workflowData: [
+          [
+            {
+              json: outputData,
+            },
+          ],
         ],
-      ],
-    };
+      };
+    } catch (error) {
+      console.error('StreamDeck webhook processing error:', error);
+
+      // Return error data to workflow for debugging
+      return {
+        workflowData: [
+          [
+            {
+              json: {
+                error: true,
+                message:
+                  error instanceof Error ? error.message : 'Unknown error',
+                timestamp: new Date().toISOString(),
+                rawPayload: bodyData,
+              },
+            },
+          ],
+        ],
+      };
+    }
   }
 }
