@@ -3,13 +3,30 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { io, Socket } from 'socket.io-client';
-import { DeviceEvent } from '@/types/streamdeck';
+import {
+  DeviceEvent,
+  DeviceConnectionEvent,
+  ButtonPressEvent,
+} from '@/types/api';
+import { deviceKeys } from '@/hooks/useDevices';
+import { buttonKeys } from '@/hooks/useButtons';
 
 interface UseRealTimeEventsOptions {
-  onDeviceConnected?: (deviceId: string) => void;
-  onDeviceDisconnected?: (deviceId: string) => void;
-  onButtonPressed?: (deviceId: string, buttonPosition: number) => void;
-  onButtonReleased?: (deviceId: string, buttonPosition: number) => void;
+  onDeviceConnected?: (deviceId: string, device?: any) => void;
+  onDeviceDisconnected?: (deviceId: string, device?: any) => void;
+  onButtonPressed?: (
+    deviceId: string,
+    buttonPosition: number,
+    button?: any
+  ) => void;
+  onButtonReleased?: (
+    deviceId: string,
+    buttonPosition: number,
+    button?: any
+  ) => void;
+  onError?: (error: any) => void;
+  onConnect?: () => void;
+  onDisconnect?: (reason: string) => void;
 }
 
 export function useRealTimeEvents(options: UseRealTimeEventsOptions = {}) {

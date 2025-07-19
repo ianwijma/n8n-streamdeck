@@ -1,26 +1,26 @@
 'use client';
 
 import React, { useState } from 'react';
-import { StreamDeckDevice, StreamDeckButton } from '@/types/streamdeck';
+import { DeviceResponse, ButtonResponse } from '@/types/api';
 import DeviceList from '@/components/streamdeck/DeviceList';
 import ButtonGrid from '@/components/streamdeck/ButtonGrid';
 import ButtonEditor from '@/components/streamdeck/ButtonEditor';
 
 export default function DevicesPage() {
-  const [selectedDevice, setSelectedDevice] = useState<StreamDeckDevice | null>(
+  const [selectedDevice, setSelectedDevice] = useState<DeviceResponse | null>(
     null
   );
   const [editingButton, setEditingButton] = useState<{
-    button: StreamDeckButton | null;
+    button: ButtonResponse | null;
     position: number;
   } | null>(null);
 
-  const handleDeviceSelect = (device: StreamDeckDevice) => {
+  const handleDeviceSelect = (device: DeviceResponse) => {
     setSelectedDevice(device);
   };
 
   const handleButtonClick = (
-    button: StreamDeckButton | null,
+    button: ButtonResponse | null,
     position: number
   ) => {
     setEditingButton({ button, position });

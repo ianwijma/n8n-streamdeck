@@ -1,12 +1,12 @@
 'use client';
 
 import React from 'react';
-import { StreamDeckDevice } from '@/types/streamdeck';
+import { DeviceResponse } from '@/types/api';
 import { useConnectDevice, useDisconnectDevice } from '@/hooks/useDevices';
 
 interface DeviceCardProps {
-  device: StreamDeckDevice;
-  onClick?: (device: StreamDeckDevice) => void;
+  device: DeviceResponse;
+  onClick?: (device: DeviceResponse) => void;
   className?: string;
 }
 

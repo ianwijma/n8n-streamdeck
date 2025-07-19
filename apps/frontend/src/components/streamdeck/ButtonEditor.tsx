@@ -3,10 +3,11 @@
 import React, { useState, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import {
-  StreamDeckButton,
-  ButtonConfiguration,
-  ButtonAction,
-} from '@/types/streamdeck';
+  ButtonResponse,
+  ButtonCreateRequest,
+  ButtonUpdateRequest,
+  ButtonActionResponse,
+} from '@/types/api';
 import {
   useUpdateButton,
   useCreateButton,
@@ -41,10 +42,18 @@ interface ButtonConfigForm {
 
 interface ButtonEditorProps {
   deviceId: string;
-  button: StreamDeckButton | null;
+  button: ButtonResponse | null;
   position: number;
   onClose: () => void;
-  onSave?: (button: StreamDeckButton) => void;
+  onSave?: (button: ButtonResponse) => void;
+}
+
+interface ButtonEditorProps {
+  deviceId: string;
+  button: ButtonResponse | null;
+  position: number;
+  onClose: () => void;
+  onSave?: (button: ButtonResponse) => void;
 }
 
 export default function ButtonEditor({
@@ -150,7 +159,7 @@ export default function ButtonEditor({
 
   const buildActionConfig = (
     data: ButtonConfigForm
-  ): ButtonAction | undefined => {
+  ): ButtonActionResponse | undefined => {
     if (!data.actionType) return undefined;
 
     switch (data.actionType) {
@@ -203,7 +212,7 @@ export default function ButtonEditor({
 
   const onSubmit = async (data: ButtonConfigForm) => {
     try {
-      const config: ButtonConfiguration = {
+      const config: ButtonCreateRequest = {
         position,
         title: data.title,
         backgroundColor: data.backgroundColor,
@@ -213,7 +222,7 @@ export default function ButtonEditor({
         action: buildActionConfig(data),
       };
 
-      let savedButton: StreamDeckButton;
+      let savedButton: ButtonResponse;
 
       if (button) {
         savedButton = await updateButton.mutateAsync({

@@ -17,18 +17,18 @@ import {
 } from '@dnd-kit/sortable';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { StreamDeckDevice, StreamDeckButton } from '@/types/streamdeck';
+import { DeviceResponse, ButtonResponse } from '@/types/api';
 import { useButtons, useUpdateButton } from '@/hooks/useButtons';
 import { useRealTimeEvents } from '@/hooks/useRealTimeEvents';
 
 interface ButtonGridProps {
-  device: StreamDeckDevice;
-  onButtonClick?: (button: StreamDeckButton | null, position: number) => void;
+  device: DeviceResponse;
+  onButtonClick?: (button: ButtonResponse | null, position: number) => void;
   className?: string;
 }
 
 interface SortableButtonProps {
-  button: StreamDeckButton | null;
+  button: ButtonResponse | null;
   position: number;
   isPressed?: boolean;
   onClick?: () => void;
@@ -170,7 +170,7 @@ export default function ButtonGrid({
     })
   );
 
-  const buttonMap = new Map<number, StreamDeckButton>();
+  const buttonMap = new Map<number, ButtonResponse>();
   buttons?.forEach((button) => {
     buttonMap.set(button.position, button);
   });
