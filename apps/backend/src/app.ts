@@ -4,20 +4,18 @@ import { config, validateConfig } from './config/environment';
 
 // Middleware imports
 import { corsMiddleware } from './middleware/cors';
-import { 
-  requestIdMiddleware, 
-  requestLoggingMiddleware, 
-  errorLoggingMiddleware 
+import {
+  requestIdMiddleware,
+  requestLoggingMiddleware,
+  errorLoggingMiddleware,
 } from './middleware/logging';
-import { 
-  errorHandler, 
-  notFoundHandler 
-} from './middleware/errorHandler';
+import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 
 // Route imports
 import healthRoutes from './routes/health';
 import devicesRoutes from './routes/devices';
 import buttonsRoutes from './routes/buttons';
+import deviceButtonsRoutes from './routes/deviceButtons';
 import configRoutes from './routes/config';
 
 const logger = new Logger({ level: config.logLevel }, 'App');
@@ -26,9 +24,13 @@ export const createApp = (): Application => {
   // Validate configuration
   const configValidation = validateConfig();
   if (!configValidation.valid) {
-    logger.error('Invalid configuration', new Error('Configuration validation failed'), {
-      errors: configValidation.errors,
-    });
+    logger.error(
+      'Invalid configuration',
+      new Error('Configuration validation failed'),
+      {
+        errors: configValidation.errors,
+      }
+    );
     process.exit(1);
   }
 
@@ -68,6 +70,8 @@ export const createApp = (): Application => {
   app.use('/api/buttons', buttonsRoutes);
   app.use('/api/config', configRoutes);
 
+  // Device-specific button routes (proper REST structure)
+  app.use('/api/devices/:deviceId/buttons', deviceButtonsRoutes);
   // Root endpoint
   app.get('/', (req, res) => {
     res.json({
