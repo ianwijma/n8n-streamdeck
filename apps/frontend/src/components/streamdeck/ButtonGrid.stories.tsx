@@ -2,23 +2,6 @@ import type { Meta, StoryObj } from '@storybook/react';
 import ButtonGrid from './ButtonGrid';
 import { mockDevice } from '../../tests/mocks';
 
-// Mock the hooks used by ButtonGrid
-jest.mock('../../hooks/useButtons', () => ({
-  useButtons: () => ({
-    data: [],
-    isLoading: false,
-    error: null,
-  }),
-  useUpdateButton: () => ({
-    mutateAsync: () => Promise.resolve(),
-    isPending: false,
-  }),
-  useDeleteButton: () => ({
-    mutateAsync: () => Promise.resolve(),
-    isPending: false,
-  }),
-}));
-
 const meta: Meta<typeof ButtonGrid> = {
   title: 'StreamDeck/ButtonGrid',
   component: ButtonGrid,

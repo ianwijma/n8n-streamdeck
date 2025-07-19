@@ -14,8 +14,6 @@ const config: StorybookConfig = {
   addons: [
     getAbsolutePath('@storybook/addon-docs'),
     getAbsolutePath('@storybook/addon-onboarding'),
-    '@storybook/addon-controls',
-    '@storybook/addon-actions',
   ],
   framework: {
     name: getAbsolutePath('@storybook/nextjs'),
@@ -29,6 +27,20 @@ const config: StorybookConfig = {
       propFilter: (prop) =>
         prop.parent ? !/node_modules/.test(prop.parent.fileName) : true,
     },
+  },
+  webpackFinal: async (config) => {
+    // Mock the hooks for Storybook
+    config.resolve = config.resolve || {};
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      '../hooks/useButtons': require.resolve('./mocks/hooks.js'),
+      '../hooks/useDevices': require.resolve('./mocks/hooks.js'),
+      '../hooks/useRealTimeEvents': require.resolve('./mocks/hooks.js'),
+      '../../hooks/useButtons': require.resolve('./mocks/hooks.js'),
+      '../../hooks/useDevices': require.resolve('./mocks/hooks.js'),
+      '../../hooks/useRealTimeEvents': require.resolve('./mocks/hooks.js'),
+    };
+    return config;
   },
 };
 export default config;

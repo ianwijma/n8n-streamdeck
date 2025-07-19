@@ -2,18 +2,6 @@ import type { Meta, StoryObj } from '@storybook/react';
 import DeviceCard from './DeviceCard';
 import { mockDevice, mockDisconnectedDevice } from '../../tests/mocks';
 
-// Mock the hooks used by DeviceCard
-jest.mock('../../hooks/useDevices', () => ({
-  useConnectDevice: () => ({
-    mutateAsync: () => Promise.resolve(),
-    isPending: false,
-  }),
-  useDisconnectDevice: () => ({
-    mutateAsync: () => Promise.resolve(),
-    isPending: false,
-  }),
-}));
-
 const meta: Meta<typeof DeviceCard> = {
   title: 'StreamDeck/DeviceCard',
   component: DeviceCard,
