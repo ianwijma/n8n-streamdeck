@@ -1,0 +1,119 @@
+config:
+  target: 'http://localhost:3001'
+  phases:
+    # Warm-up phase
+    - duration: 60
+      arrivalRate: 5
+      name: 'Warm-up'
+    # Ramp-up phase
+    - duration: 120
+      arrivalRate: 10
+      rampTo: 50
+      name: 'Ramp-up'
+    # Sustained load phase
+    - duration: 300
+      arrivalRate: 50
+      name: 'Sustained load'
+    # Peak load phase
+    - duration: 60
+      arrivalRate: 100
+      name: 'Peak load'
+    # Cool-down phase
+    - duration: 60
+      arrivalRate: 10
+      name: 'Cool-down'
+
+  # Global configuration
+  timeout: 30
+  pool: 50
+
+  # Variables for dynamic testing
+  variables:
+    deviceId:
+      - 'test-device-1'
+      - 'test-device-2'
+      - 'test-device-3'
+    buttonIndex:
+      - 0
+      - 1
+      - 2
+      - 3
+      - 4
+
+  # Plugins for enhanced reporting
+  plugins:
+    metrics-by-endpoint:
+      useOnlyRequestNames: true
+
+  # Custom metrics
+  processor: './load-testing/processor.js'
+
+scenarios:
+  # Health check scenario (lightweight)
+  - name: 'Health Check'
+    weight: 20
+    flow:
+      - get:
+          url: '/api/health'
+          name: 'Health Check'
+          expect:
+            - statusCode: 200
+      - think: 1
+
+  # Device listing scenario
+  - name: 'List Devices'
+    weight: 30
+    flow:
+      - get:
+          url: '/api/devices'
+          name: 'List Devices'
+          expect:
+            - statusCode: 200
+            - hasProperty: 'data'
+      - think: 2
+
+  # Device details scenario
+  - name: 'Device Details'
+    weight: 25
+    flow:
+      - get:
+          url: '/api/devices/{{ deviceId }}'
+          name: 'Get Device Details'
+          expect:
+            - statusCode: [200, 404]
+      - think: 1
+
+  # Button operations scenario
+  - name: 'Button Operations'
+    weight: 15
+    flow:
+      - get:
+          url: '/api/devices/{{ deviceId }}/buttons'
+          name: 'List Buttons'
+          expect:
+            - statusCode: [200, 404]
+      - think: 1
+      - post:
+          url: '/api/devices/{{ deviceId }}/buttons/{{ buttonIndex }}/press'
+          name: 'Press Button'
+          json:
+            duration: 100
+          expect:
+            - statusCode: [200, 404, 400]
+      - think: 2
+
+  # Performance metrics scenario
+  - name: 'Performance Metrics'
+    weight: 10
+    flow:
+      - get:
+          url: '/api/health/metrics'
+          name: 'Get Metrics'
+          expect:
+            - statusCode: 200
+      - get:
+          url: '/api/health/detailed'
+          name: 'Detailed Health'
+          expect:
+            - statusCode: [200, 503]
+      - think: 5

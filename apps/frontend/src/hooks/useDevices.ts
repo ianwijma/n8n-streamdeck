@@ -69,7 +69,7 @@ export function useConnectDevice() {
 
       return { previousDevice };
     },
-    onError: (err, deviceId, context) => {
+    onError: (_err, deviceId, context) => {
       // Rollback on error
       if (context?.previousDevice) {
         queryClient.setQueryData(
@@ -78,7 +78,7 @@ export function useConnectDevice() {
         );
       }
     },
-    onSettled: (data, error, deviceId) => {
+    onSettled: (_data, _error, deviceId) => {
       // Always refetch after error or success
       queryClient.invalidateQueries({ queryKey: deviceKeys.lists() });
       queryClient.invalidateQueries({ queryKey: deviceKeys.detail(deviceId) });
@@ -109,7 +109,7 @@ export function useDisconnectDevice() {
 
       return { previousDevice };
     },
-    onError: (err, deviceId, context) => {
+    onError: (_err, deviceId, context) => {
       if (context?.previousDevice) {
         queryClient.setQueryData(
           deviceKeys.detail(deviceId),
@@ -117,7 +117,7 @@ export function useDisconnectDevice() {
         );
       }
     },
-    onSettled: (data, error, deviceId) => {
+    onSettled: (_data, _error, deviceId) => {
       queryClient.invalidateQueries({ queryKey: deviceKeys.lists() });
       queryClient.invalidateQueries({ queryKey: deviceKeys.detail(deviceId) });
     },
@@ -147,7 +147,7 @@ export function useDeleteDevice() {
 
   return useMutation({
     mutationFn: (deviceId: string) => deviceService.deleteDevice(deviceId),
-    onSuccess: (data, deviceId) => {
+    onSuccess: (_data, deviceId) => {
       queryClient.removeQueries({ queryKey: deviceKeys.detail(deviceId) });
       queryClient.invalidateQueries({ queryKey: deviceKeys.lists() });
     },

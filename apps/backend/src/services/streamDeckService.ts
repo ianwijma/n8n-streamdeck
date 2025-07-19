@@ -18,7 +18,7 @@ import {
   EventType,
 } from '@n8n-streamdeck/shared';
 import { config } from '../config/environment';
-import { cacheService, CachedAsync } from './cacheService';
+import { cacheService } from './cacheService';
 
 export interface StreamDeckServiceOptions {
   autoConnect?: boolean;
@@ -34,8 +34,11 @@ export class StreamDeckService extends EventEmitter {
   private connectedDevices: Map<string, StreamDeckDevice> = new Map();
   private deviceInfo: Map<string, Device> = new Map();
   private reconnectTimers: Map<string, NodeJS.Timeout> = new Map();
+  private connectionPool: Map<string, StreamDeckDevice[]> = new Map();
+  private connectionQueue: Map<string, Promise<StreamDeckDevice>> = new Map();
   private options: StreamDeckServiceOptions;
   private mockDevices: Map<string, Device> = new Map(); // For testing
+  private imageCache: Map<string, Buffer> = new Map();
 
   constructor(options: StreamDeckServiceOptions = {}) {
     super();
@@ -45,6 +48,8 @@ export class StreamDeckService extends EventEmitter {
       reconnectInterval:
         options.reconnectInterval ?? config.streamdeck.reconnectInterval,
       maxReconnectAttempts: options.maxReconnectAttempts ?? 10,
+      maxConnections: options.maxConnections ?? 5,
+      connectionTimeout: options.connectionTimeout ?? 30000,
     };
 
     this.logger.info('StreamDeck service initialized', {
@@ -58,6 +63,12 @@ export class StreamDeckService extends EventEmitter {
    * Discover available StreamDeck devices
    */
   async discoverDevices(): Promise<Device[]> {
+    // Check cache first
+    const cached = cacheService.get<Device[]>('discover-devices');
+    if (cached) {
+      this.logger.debug('Returning cached device discovery results');
+      return cached;
+    }
     try {
       this.logger.info('Starting device discovery');
 
@@ -78,6 +89,10 @@ export class StreamDeckService extends EventEmitter {
       }
 
       this.logger.info(`Discovery completed, found ${devices.length} devices`);
+
+      // Cache the results
+      cacheService.set('discover-devices', devices, 30000); // 30 seconds
+
       return devices;
     } catch (error) {
       this.logger.error('Device discovery failed', error as Error);
@@ -264,9 +279,23 @@ export class StreamDeckService extends EventEmitter {
         imagePath,
       });
 
-      // Read image file
-      const imageBuffer = await fs.readFile(imagePath);
+      // Check image cache first
+      const cacheKey = `${imagePath}:${device.type}`;
+      let imageBuffer = this.imageCache.get(cacheKey);
 
+      if (!imageBuffer) {
+        // Read and cache image file
+        imageBuffer = await fs.readFile(imagePath);
+        this.imageCache.set(cacheKey, imageBuffer);
+
+        // Limit cache size
+        if (this.imageCache.size > 100) {
+          const firstKey = this.imageCache.keys().next().value;
+          if (firstKey) {
+            this.imageCache.delete(firstKey);
+          }
+        }
+      }
       // Set the button image
       await streamDeck.fillKeyBuffer(buttonIndex, imageBuffer);
 
@@ -274,6 +303,7 @@ export class StreamDeckService extends EventEmitter {
         deviceId,
         buttonIndex,
         imageSize: imageBuffer.length,
+        cached: this.imageCache.has(cacheKey),
       });
     } catch (error) {
       this.logger.error('Failed to set button image', error as Error, {
@@ -424,6 +454,62 @@ export class StreamDeckService extends EventEmitter {
     });
 
     this.emit('deviceError', errorEvent);
+  }
+
+  /**
+   * Get or create a pooled connection
+   */
+  private async getPooledConnection(
+    deviceId: string
+  ): Promise<StreamDeckDevice> {
+    // Check if we have an existing connection
+    if (this.connectedDevices.has(deviceId)) {
+      return this.connectedDevices.get(deviceId)!;
+    }
+
+    // Check if there's already a connection attempt in progress
+    if (this.connectionQueue.has(deviceId)) {
+      return this.connectionQueue.get(deviceId)!;
+    }
+
+    // Create new connection
+    const connectionPromise = this.createConnection(deviceId);
+    this.connectionQueue.set(deviceId, connectionPromise);
+
+    try {
+      const connection = await connectionPromise;
+      this.connectionQueue.delete(deviceId);
+      return connection;
+    } catch (error) {
+      this.connectionQueue.delete(deviceId);
+      throw error;
+    }
+  }
+
+  /**
+   * Create a new device connection
+   */
+  private async createConnection(deviceId: string): Promise<StreamDeckDevice> {
+    const device = this.deviceInfo.get(deviceId);
+    if (!device) {
+      throw new Error(`Device ${deviceId} not found`);
+    }
+
+    const streamDecks = await listStreamDecks();
+    const streamDeckInfo = streamDecks.find(
+      (sd) => this.generateDeviceId(sd) === deviceId
+    );
+
+    if (!streamDeckInfo) {
+      throw new Error(
+        `StreamDeck device ${deviceId} not found during connection`
+      );
+    }
+
+    const streamDeck = await openStreamDeck(streamDeckInfo.path);
+    this.connectedDevices.set(deviceId, streamDeck);
+
+    return streamDeck;
   }
 
   /**
