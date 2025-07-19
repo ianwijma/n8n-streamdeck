@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React from 'react';
 import {
   DndContext,
   closestCenter,
@@ -18,12 +18,20 @@ import {
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { DeviceResponse, ButtonResponse } from '@/types/api';
-import { useButtons, useUpdateButton } from '@/hooks/useButtons';
-import { useRealTimeEvents } from '@/hooks/useRealTimeEvents';
 
 interface ButtonGridProps {
   device: DeviceResponse;
+  buttons?: ButtonResponse[];
+  isLoading?: boolean;
+  error?: Error | null;
+  pressedButtons?: Set<number>;
   onButtonClick?: (button: ButtonResponse | null, position: number) => void;
+  onButtonReorder?: (
+    oldIndex: number,
+    newIndex: number,
+    oldButton: ButtonResponse | null,
+    newButton: ButtonResponse | null
+  ) => Promise<void>;
   className?: string;
 }
 
@@ -139,30 +147,14 @@ function SortableButton({
 
 export default function ButtonGrid({
   device,
+  buttons = [],
+  isLoading = false,
+  error = null,
+  pressedButtons = new Set(),
   onButtonClick,
+  onButtonReorder,
   className = '',
 }: ButtonGridProps) {
-  const { data: buttons, isLoading, error } = useButtons(device.id);
-  const updateButton = useUpdateButton();
-  const [pressedButtons, setPressedButtons] = useState<Set<number>>(new Set());
-
-  useRealTimeEvents({
-    onButtonPressed: (deviceId, buttonPosition) => {
-      if (deviceId === device.id) {
-        setPressedButtons((prev) => new Set(prev).add(buttonPosition));
-      }
-    },
-    onButtonReleased: (deviceId, buttonPosition) => {
-      if (deviceId === device.id) {
-        setPressedButtons((prev) => {
-          const newSet = new Set(prev);
-          newSet.delete(buttonPosition);
-          return newSet;
-        });
-      }
-    },
-  });
-
   const sensors = useSensors(
     useSensor(PointerSensor),
     useSensor(KeyboardSensor, {
@@ -171,7 +163,7 @@ export default function ButtonGrid({
   );
 
   const buttonMap = new Map<number, ButtonResponse>();
-  buttons?.forEach((button) => {
+  buttons.forEach((button) => {
     buttonMap.set(button.position, button);
   });
 
@@ -182,7 +174,7 @@ export default function ButtonGrid({
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
 
-    if (over && active.id !== over.id) {
+    if (over && active.id !== over.id && onButtonReorder) {
       const oldIndex = Number(active.id);
       const newIndex = Number(over.id);
 
@@ -190,21 +182,12 @@ export default function ButtonGrid({
       const newButton = buttonMap.get(newIndex);
 
       try {
-        if (oldButton) {
-          await updateButton.mutateAsync({
-            deviceId: device.id,
-            buttonId: oldButton.id,
-            config: { position: newIndex },
-          });
-        }
-
-        if (newButton) {
-          await updateButton.mutateAsync({
-            deviceId: device.id,
-            buttonId: newButton.id,
-            config: { position: oldIndex },
-          });
-        }
+        await onButtonReorder(
+          oldIndex,
+          newIndex,
+          oldButton || null,
+          newButton || null
+        );
       } catch (error) {
         console.error('Failed to reorder buttons:', error);
       }

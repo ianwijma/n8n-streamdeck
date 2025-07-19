@@ -20,8 +20,19 @@ const meta: Meta<typeof DeviceCard> = {
       description: 'Device data object containing all device information',
       control: { type: 'object' },
     },
+    isConnecting: {
+      description: 'Whether the device is currently connecting',
+      control: { type: 'boolean' },
+    },
+    isDisconnecting: {
+      description: 'Whether the device is currently disconnecting',
+      control: { type: 'boolean' },
+    },
     onClick: {
       description: 'Callback function called when the device card is clicked',
+    },
+    onConnectionToggle: {
+      description: 'Callback function called when connection toggle is clicked',
     },
     className: {
       description: 'Additional CSS classes to apply to the card',
@@ -37,7 +48,11 @@ type Story = StoryObj<typeof meta>;
 export const Default: Story = {
   args: {
     device: mockDevice,
-    onClick: () => console.log('device-clicked'),
+    isConnecting: false,
+    isDisconnecting: false,
+    onClick: (device) => console.log('device-clicked', device),
+    onConnectionToggle: async (device) =>
+      console.log('connection-toggle', device),
   },
 };
 
@@ -52,7 +67,11 @@ export const Connected: Story = {
       columns: 8,
       rows: 4,
     },
-    onClick: () => console.log('device-clicked'),
+    isConnecting: false,
+    isDisconnecting: false,
+    onClick: (device) => console.log('device-clicked', device),
+    onConnectionToggle: async (device) =>
+      console.log('connection-toggle', device),
     className: 'border-green-200',
   },
   parameters: {
@@ -73,13 +92,55 @@ export const Disconnected: Story = {
       name: 'Offline StreamDeck',
       lastSeen: new Date(Date.now() - 3600000).toISOString(), // 1 hour ago
     },
-    onClick: () => console.log('device-clicked'),
+    isConnecting: false,
+    isDisconnecting: false,
+    onClick: (device) => console.log('device-clicked', device),
+    onConnectionToggle: async (device) =>
+      console.log('connection-toggle', device),
   },
   parameters: {
     docs: {
       description: {
         story:
           'A disconnected StreamDeck device showing offline status and last seen time.',
+      },
+    },
+  },
+};
+
+// Connecting state
+export const Connecting: Story = {
+  args: {
+    device: mockDisconnectedDevice,
+    isConnecting: true,
+    isDisconnecting: false,
+    onClick: (device) => console.log('device-clicked', device),
+    onConnectionToggle: async (device) =>
+      console.log('connection-toggle', device),
+  },
+  parameters: {
+    docs: {
+      description: {
+        story: 'Device in connecting state showing loading indicator.',
+      },
+    },
+  },
+};
+
+// Disconnecting state
+export const Disconnecting: Story = {
+  args: {
+    device: mockDevice,
+    isConnecting: false,
+    isDisconnecting: true,
+    onClick: (device) => console.log('device-clicked', device),
+    onConnectionToggle: async (device) =>
+      console.log('connection-toggle', device),
+  },
+  parameters: {
+    docs: {
+      description: {
+        story: 'Device in disconnecting state showing loading indicator.',
       },
     },
   },
@@ -93,7 +154,11 @@ export const LongName: Story = {
       name: 'StreamDeck with a Very Long Name That Should Be Truncated Properly',
       model: 'Stream Deck MK.2 Professional Edition',
     },
-    onClick: () => console.log('device-clicked'),
+    isConnecting: false,
+    isDisconnecting: false,
+    onClick: (device) => console.log('device-clicked', device),
+    onConnectionToggle: async (device) =>
+      console.log('connection-toggle', device),
   },
   parameters: {
     docs: {
@@ -116,7 +181,11 @@ export const MiniDevice: Story = {
       columns: 3,
       rows: 2,
     },
-    onClick: () => console.log('device-clicked'),
+    isConnecting: false,
+    isDisconnecting: false,
+    onClick: (device) => console.log('device-clicked', device),
+    onConnectionToggle: async (device) =>
+      console.log('connection-toggle', device),
   },
   parameters: {
     docs: {
@@ -138,7 +207,11 @@ export const XLDevice: Story = {
       columns: 8,
       rows: 4,
     },
-    onClick: () => console.log('device-clicked'),
+    isConnecting: false,
+    isDisconnecting: false,
+    onClick: (device) => console.log('device-clicked', device),
+    onConnectionToggle: async (device) =>
+      console.log('connection-toggle', device),
   },
   parameters: {
     docs: {
@@ -157,28 +230,16 @@ export const NeverConnected: Story = {
       name: 'New StreamDeck',
       lastSeen: undefined,
     },
-    onClick: () => console.log('device-clicked'),
+    isConnecting: false,
+    isDisconnecting: false,
+    onClick: (device) => console.log('device-clicked', device),
+    onConnectionToggle: async (device) =>
+      console.log('connection-toggle', device),
   },
   parameters: {
     docs: {
       description: {
         story: 'A device that has never been connected before.',
-      },
-    },
-  },
-};
-
-// Interactive example with all states
-export const Interactive: Story = {
-  args: {
-    device: mockDevice,
-    onClick: () => console.log('device-clicked'),
-  },
-  parameters: {
-    docs: {
-      description: {
-        story:
-          'Interactive example where you can modify all device properties using controls.',
       },
     },
   },

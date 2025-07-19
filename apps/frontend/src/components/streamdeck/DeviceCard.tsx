@@ -2,33 +2,33 @@
 
 import React from 'react';
 import { DeviceResponse } from '@/types/api';
-import { useConnectDevice, useDisconnectDevice } from '@/hooks/useDevices';
 
 interface DeviceCardProps {
   device: DeviceResponse;
+  isConnecting?: boolean;
+  isDisconnecting?: boolean;
   onClick?: (device: DeviceResponse) => void;
+  onConnectionToggle?: (device: DeviceResponse) => Promise<void>;
   className?: string;
 }
 
 export default function DeviceCard({
   device,
+  isConnecting = false,
+  isDisconnecting = false,
   onClick,
+  onConnectionToggle,
   className = '',
 }: DeviceCardProps) {
-  const connectDevice = useConnectDevice();
-  const disconnectDevice = useDisconnectDevice();
-
   const handleConnectionToggle = async (e: React.MouseEvent) => {
     e.stopPropagation();
 
-    try {
-      if (device.connected) {
-        await disconnectDevice.mutateAsync(device.id);
-      } else {
-        await connectDevice.mutateAsync(device.id);
+    if (onConnectionToggle) {
+      try {
+        await onConnectionToggle(device);
+      } catch (error) {
+        console.error('Failed to toggle device connection:', error);
       }
-    } catch (error) {
-      console.error('Failed to toggle device connection:', error);
     }
   };
 
@@ -36,7 +36,7 @@ export default function DeviceCard({
     onClick?.(device);
   };
 
-  const isLoading = connectDevice.isPending || disconnectDevice.isPending;
+  const isLoading = isConnecting || isDisconnecting;
 
   return (
     <div
