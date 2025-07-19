@@ -29,17 +29,26 @@ const config: StorybookConfig = {
     },
   },
   webpackFinal: async (config) => {
-    // Mock the hooks for Storybook
-    config.resolve = config.resolve || {};
-    config.resolve.alias = {
-      ...config.resolve.alias,
-      '../hooks/useButtons': require.resolve('./mocks/hooks.js'),
-      '../hooks/useDevices': require.resolve('./mocks/hooks.js'),
-      '../hooks/useRealTimeEvents': require.resolve('./mocks/hooks.js'),
-      '../../hooks/useButtons': require.resolve('./mocks/hooks.js'),
-      '../../hooks/useDevices': require.resolve('./mocks/hooks.js'),
-      '../../hooks/useRealTimeEvents': require.resolve('./mocks/hooks.js'),
-    };
+    // Mock the hooks for Storybook using webpack's NormalModuleReplacementPlugin
+    const path = require('path');
+    const webpack = require('webpack');
+
+    config.plugins = config.plugins || [];
+    config.plugins.push(
+      new webpack.NormalModuleReplacementPlugin(
+        /src\/hooks\/useButtons$/,
+        path.resolve(__dirname, 'mocks/hooks.js')
+      ),
+      new webpack.NormalModuleReplacementPlugin(
+        /src\/hooks\/useDevices$/,
+        path.resolve(__dirname, 'mocks/hooks.js')
+      ),
+      new webpack.NormalModuleReplacementPlugin(
+        /src\/hooks\/useRealTimeEvents$/,
+        path.resolve(__dirname, 'mocks/hooks.js')
+      )
+    );
+
     return config;
   },
 };
