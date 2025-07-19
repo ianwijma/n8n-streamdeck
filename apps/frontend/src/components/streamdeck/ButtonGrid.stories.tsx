@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import ButtonGrid from './ButtonGrid';
-import { mockButtons, mockDevice } from '../../tests/mocks';
+import { mockDevice } from '../../tests/mocks';
 
 // Mock the hooks used by ButtonGrid
 jest.mock('../../hooks/useButtons', () => ({
@@ -71,42 +71,8 @@ export const Empty: Story = {
 export const FullyConfigured: Story = {
   args: {
     device: mockDevice,
-    onButtonClick: (button, position) => console.log('Button clicked:', button, position),
-  },
-      {
-        ...mockButtons[0],
-        id: 'button-5',
-        position: 4,
-        title: 'Button 5',
-        backgroundColor: '#ef4444',
-      },
-      {
-        ...mockButtons[0],
-        id: 'button-6',
-        position: 5,
-        title: 'Button 6',
-        backgroundColor: '#10b981',
-      },
-      {
-        ...mockButtons[0],
-        id: 'button-7',
-        position: 6,
-        title: 'Button 7',
-        backgroundColor: '#f59e0b',
-      },
-      {
-        ...mockButtons[0],
-        id: 'button-8',
-        position: 7,
-        title: 'Button 8',
-        backgroundColor: '#8b5cf6',
-      },
-    ],
-    rows: 3,
-    columns: 5,
-    onButtonClick: (position: number) =>
-      console.log('Button clicked:', position),
-    onButtonEdit: (position: number) => console.log('Button edit:', position),
+    onButtonClick: (button, position) =>
+      console.log('Button clicked:', button, position),
   },
   parameters: {
     docs: {
@@ -121,32 +87,9 @@ export const FullyConfigured: Story = {
 // Mixed configured and empty buttons
 export const Mixed: Story = {
   args: {
-    deviceId: mockDevice.id,
-    buttons: [
-      mockButtons[0], // Position 0
-      mockButtons[1], // Position 1
-      // Position 2 empty
-      {
-        ...mockButtons[0],
-        id: 'button-4',
-        position: 3,
-        title: 'Settings',
-        backgroundColor: '#6b7280',
-      },
-      // Positions 4-6 empty
-      {
-        ...mockButtons[0],
-        id: 'button-8',
-        position: 7,
-        title: 'Help',
-        backgroundColor: '#06b6d4',
-      },
-    ],
-    rows: 3,
-    columns: 5,
-    onButtonClick: (position: number) =>
-      console.log('Button clicked:', position),
-    onButtonEdit: (position: number) => console.log('Button edit:', position),
+    device: mockDevice,
+    onButtonClick: (button, position) =>
+      console.log('Button clicked:', button, position),
   },
   parameters: {
     docs: {
@@ -161,34 +104,9 @@ export const Mixed: Story = {
 // Mini StreamDeck layout (2x3)
 export const MiniLayout: Story = {
   args: {
-    deviceId: mockDevice.id,
-    buttons: [
-      {
-        ...mockButtons[0],
-        position: 0,
-        title: 'Mic',
-        backgroundColor: '#dc2626',
-      },
-      {
-        ...mockButtons[0],
-        id: 'button-2',
-        position: 1,
-        title: 'Camera',
-        backgroundColor: '#059669',
-      },
-      {
-        ...mockButtons[0],
-        id: 'button-3',
-        position: 2,
-        title: 'Screen',
-        backgroundColor: '#7c3aed',
-      },
-    ],
-    rows: 2,
-    columns: 3,
-    onButtonClick: (position: number) =>
-      console.log('Button clicked:', position),
-    onButtonEdit: (position: number) => console.log('Button edit:', position),
+    device: mockDevice,
+    onButtonClick: (button, position) =>
+      console.log('Button clicked:', button, position),
   },
   parameters: {
     docs: {
@@ -202,48 +120,9 @@ export const MiniLayout: Story = {
 // XL StreamDeck layout (4x8)
 export const XLLayout: Story = {
   args: {
-    deviceId: mockDevice.id,
-    buttons: [
-      {
-        ...mockButtons[0],
-        position: 0,
-        title: 'Scene 1',
-        backgroundColor: '#1f2937',
-      },
-      {
-        ...mockButtons[0],
-        id: 'button-2',
-        position: 1,
-        title: 'Scene 2',
-        backgroundColor: '#374151',
-      },
-      {
-        ...mockButtons[0],
-        id: 'button-3',
-        position: 8,
-        title: 'Mic Mute',
-        backgroundColor: '#dc2626',
-      },
-      {
-        ...mockButtons[0],
-        id: 'button-4',
-        position: 9,
-        title: 'Camera',
-        backgroundColor: '#059669',
-      },
-      {
-        ...mockButtons[0],
-        id: 'button-5',
-        position: 16,
-        title: 'Music',
-        backgroundColor: '#7c3aed',
-      },
-    ],
-    rows: 4,
-    columns: 8,
-    onButtonClick: (position: number) =>
-      console.log('Button clicked:', position),
-    onButtonEdit: (position: number) => console.log('Button edit:', position),
+    device: mockDevice,
+    onButtonClick: (button, position) =>
+      console.log('Button clicked:', button, position),
   },
   parameters: {
     docs: {
@@ -258,34 +137,9 @@ export const XLLayout: Story = {
 // Disabled buttons
 export const WithDisabledButtons: Story = {
   args: {
-    deviceId: mockDevice.id,
-    buttons: [
-      {
-        ...mockButtons[0],
-        enabled: true,
-        title: 'Active',
-        backgroundColor: '#10b981',
-      },
-      {
-        ...mockButtons[1],
-        enabled: false,
-        title: 'Disabled',
-        backgroundColor: '#6b7280',
-      },
-      {
-        ...mockButtons[0],
-        id: 'button-3',
-        position: 2,
-        enabled: true,
-        title: 'Working',
-        backgroundColor: '#3b82f6',
-      },
-    ],
-    rows: 3,
-    columns: 5,
-    onButtonClick: (position: number) =>
-      console.log('Button clicked:', position),
-    onButtonEdit: (position: number) => console.log('Button edit:', position),
+    device: mockDevice,
+    onButtonClick: (button, position) =>
+      console.log('Button clicked:', button, position),
   },
   parameters: {
     docs: {
