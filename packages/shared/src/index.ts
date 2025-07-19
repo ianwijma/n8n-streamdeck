@@ -1,3 +1,13 @@
+// Export all types
+export * from './types/device';
+export * from './types/api';
+export * from './types/events';
+export * from './types/config';
+
+// Export all utilities
+export * from './utils';
+
+// Legacy exports for backward compatibility
 export interface StreamDeckAction {
   id: string;
   title: string;
