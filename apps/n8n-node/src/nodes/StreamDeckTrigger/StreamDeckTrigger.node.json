@@ -1,0 +1,17 @@
+{
+  "node": "n8n-nodes-base.streamDeckTrigger",
+  "nodeVersion": "1.0",
+  "codexVersion": "1.0",
+  "categories": ["Trigger"],
+  "resources": {
+    "primaryDocumentation": [
+      {
+        "url": "https://github.com/your-org/n8n-streamdeck"
+      }
+    ]
+  },
+  "alias": ["StreamDeck", "Stream Deck", "Button", "Hardware"],
+  "subcategories": {
+    "Trigger": ["Hardware"]
+  }
+}
