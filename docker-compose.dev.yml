@@ -1,0 +1,202 @@
+version: '3.8'
+
+services:
+  # Backend service
+  backend:
+    build:
+      context: .
+      dockerfile: apps/backend/Dockerfile
+      target: builder
+    container_name: n8n-streamdeck-backend-dev
+    ports:
+      - '3001:3001'
+      - '9229:9229' # Debug port
+    environment:
+      - NODE_ENV=development
+      - PORT=3001
+      - HOST=0.0.0.0
+      - LOG_LEVEL=debug
+      - CORS_ORIGINS=http://localhost:3000,http://localhost:3001
+      - N8N_BASE_URL=${N8N_BASE_URL:-}
+      - N8N_API_KEY=${N8N_API_KEY:-}
+      - STREAMDECK_AUTO_CONNECT=true
+    volumes:
+      - ./apps/backend/src:/app/apps/backend/src:ro
+      - ./packages:/app/packages:ro
+      - backend-logs:/app/logs
+      - backend-data:/app/data
+    command: >
+      sh -c "
+        pnpm --filter @n8n-streamdeck/shared build &&
+        pnpm --filter @n8n-streamdeck/config build &&
+        pnpm --filter @n8n-streamdeck/backend dev
+      "
+    networks:
+      - n8n-streamdeck-dev
+    depends_on:
+      - redis
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:3001/health']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Frontend service
+  frontend:
+    build:
+      context: .
+      dockerfile: apps/frontend/Dockerfile
+      target: builder
+    container_name: n8n-streamdeck-frontend-dev
+    ports:
+      - '3000:3000'
+    environment:
+      - NODE_ENV=development
+      - PORT=3000
+      - NEXT_PUBLIC_API_URL=http://localhost:3001
+      - NEXT_TELEMETRY_DISABLED=1
+    volumes:
+      - ./apps/frontend/src:/app/apps/frontend/src:ro
+      - ./apps/frontend/public:/app/apps/frontend/public:ro
+      - ./packages:/app/packages:ro
+      - frontend-logs:/app/logs
+    command: >
+      sh -c "
+        pnpm --filter @n8n-streamdeck/shared build &&
+        pnpm --filter @n8n-streamdeck/config build &&
+        pnpm --filter @n8n-streamdeck/frontend dev
+      "
+    networks:
+      - n8n-streamdeck-dev
+    depends_on:
+      - backend
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:3000/api/health']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Redis for caching and session storage
+  redis:
+    image: redis:7-alpine
+    container_name: n8n-streamdeck-redis-dev
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    networks:
+      - n8n-streamdeck-dev
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Development database (PostgreSQL)
+  postgres:
+    image: postgres:15-alpine
+    container_name: n8n-streamdeck-postgres-dev
+    ports:
+      - '5432:5432'
+    environment:
+      - POSTGRES_DB=n8n_streamdeck_dev
+      - POSTGRES_USER=n8n_streamdeck
+      - POSTGRES_PASSWORD=dev_password_123
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    networks:
+      - n8n-streamdeck-dev
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U n8n_streamdeck -d n8n_streamdeck_dev']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Development tools container
+  devtools:
+    image: node:18-alpine
+    container_name: n8n-streamdeck-devtools
+    working_dir: /app
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - devtools-cache:/root/.cache
+    command: tail -f /dev/null
+    networks:
+      - n8n-streamdeck-dev
+    profiles:
+      - tools
+
+  # Monitoring with Prometheus (optional)
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: n8n-streamdeck-prometheus-dev
+    ports:
+      - '9090:9090'
+    volumes:
+      - ./monitoring/prometheus.dev.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    networks:
+      - n8n-streamdeck-dev
+    profiles:
+      - monitoring
+    restart: unless-stopped
+
+  # Grafana for visualization (optional)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: n8n-streamdeck-grafana-dev
+    ports:
+      - '3003:3000'
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin123
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    networks:
+      - n8n-streamdeck-dev
+    profiles:
+      - monitoring
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+networks:
+  n8n-streamdeck-dev:
+    driver: bridge
+    name: n8n-streamdeck-dev
+
+volumes:
+  backend-logs:
+    name: n8n-streamdeck-backend-logs-dev
+  backend-data:
+    name: n8n-streamdeck-backend-data-dev
+  frontend-logs:
+    name: n8n-streamdeck-frontend-logs-dev
+  redis-data:
+    name: n8n-streamdeck-redis-data-dev
+  postgres-data:
+    name: n8n-streamdeck-postgres-data-dev
+  devtools-cache:
+    name: n8n-streamdeck-devtools-cache-dev
+  prometheus-data:
+    name: n8n-streamdeck-prometheus-data-dev
+  grafana-data:
+    name: n8n-streamdeck-grafana-data-dev

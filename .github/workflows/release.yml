@@ -1,0 +1,452 @@
+name: Release Pipeline
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., 1.2.3)'
+        required: true
+        type: string
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - staging
+          - production
+
+env:
+  NODE_VERSION: '18'
+  PNPM_VERSION: '8'
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  # Job 1: Validate Release
+  validate:
+    name: Validate Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      is-prerelease: ${{ steps.version.outputs.is-prerelease }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine version
+        id: version
+        run: |
+          if [[ "${{ github.event_name }}" == "release" ]]; then
+            VERSION="${{ github.event.release.tag_name }}"
+            IS_PRERELEASE="${{ github.event.release.prerelease }}"
+          else
+            VERSION="${{ github.event.inputs.version }}"
+            IS_PRERELEASE="false"
+          fi
+
+          # Remove 'v' prefix if present
+          VERSION=${VERSION#v}
+
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "is-prerelease=${IS_PRERELEASE}" >> $GITHUB_OUTPUT
+
+          echo "Release version: ${VERSION}"
+          echo "Is prerelease: ${IS_PRERELEASE}"
+
+      - name: Validate version format
+        run: |
+          if [[ ! "${{ steps.version.outputs.version }}" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.-]+)?$ ]]; then
+            echo "Invalid version format: ${{ steps.version.outputs.version }}"
+            exit 1
+          fi
+
+      - name: Check if tag exists
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          if git rev-parse "v${{ steps.version.outputs.version }}" >/dev/null 2>&1; then
+            echo "Tag v${{ steps.version.outputs.version }} already exists"
+            exit 1
+          fi
+
+  # Job 2: Build Release Artifacts
+  build:
+    name: Build Release Artifacts
+    runs-on: ubuntu-latest
+    needs: [validate]
+    timeout-minutes: 45
+
+    outputs:
+      artifact-name: ${{ steps.artifacts.outputs.name }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+          run_install: false
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v3
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run full build
+        run: |
+          export BUILD_VERSION=${{ needs.validate.outputs.version }}
+          export BUILD_ENV=production
+          export SKIP_TESTS=false
+          export SKIP_LINT=false
+          ./scripts/build.sh
+
+      - name: Set artifact name
+        id: artifacts
+        run: |
+          ARTIFACT_NAME="release-artifacts-${{ needs.validate.outputs.version }}"
+          echo "name=${ARTIFACT_NAME}" >> $GITHUB_OUTPUT
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ steps.artifacts.outputs.name }}
+          path: |
+            dist/
+            artifacts/
+          retention-days: 90
+
+  # Job 3: Build and Push Docker Images
+  docker:
+    name: Build & Push Docker Images
+    runs-on: ubuntu-latest
+    needs: [validate, build]
+    timeout-minutes: 30
+
+    strategy:
+      matrix:
+        service: [backend, frontend]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-${{ matrix.service }}
+          tags: |
+            type=raw,value=${{ needs.validate.outputs.version }}
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=stable,enable=${{ needs.validate.outputs.is-prerelease == 'false' }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./apps/${{ matrix.service }}/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64,linux/arm64
+          build-args: |
+            BUILD_VERSION=${{ needs.validate.outputs.version }}
+            BUILD_DATE=${{ github.event.head_commit.timestamp }}
+            BUILD_COMMIT=${{ github.sha }}
+
+  # Job 4: Security Scan
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: [validate, docker]
+    timeout-minutes: 20
+
+    strategy:
+      matrix:
+        service: [backend, frontend]
+
+    steps:
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-${{ matrix.service }}:${{ needs.validate.outputs.version }}
+          format: 'sarif'
+          output: 'trivy-results-${{ matrix.service }}.sarif'
+
+      - name: Upload Trivy scan results
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: 'trivy-results-${{ matrix.service }}.sarif'
+          category: 'trivy-${{ matrix.service }}'
+
+  # Job 5: Deploy to Staging
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: [validate, build, docker, security]
+    timeout-minutes: 20
+    if: needs.validate.outputs.is-prerelease == 'false' || github.event.inputs.environment == 'staging'
+    environment:
+      name: staging
+      url: https://staging.n8n-streamdeck.example.com
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download release artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: ${{ needs.build.outputs.artifact-name }}
+
+      - name: Setup deployment environment
+        run: |
+          # Install deployment tools
+          sudo apt-get update
+          sudo apt-get install -y sshpass rsync
+
+      - name: Deploy to staging
+        run: |
+          export DEPLOY_ENV=staging
+          export IMAGE_TAG=${{ needs.validate.outputs.version }}
+          export DOCKER_REGISTRY_TOKEN=${{ secrets.GITHUB_TOKEN }}
+          ./scripts/deploy.sh staging
+        env:
+          STAGING_HOST: ${{ secrets.STAGING_HOST }}
+          STAGING_USER: ${{ secrets.STAGING_USER }}
+          STAGING_SSH_KEY: ${{ secrets.STAGING_SSH_KEY }}
+
+      - name: Run staging smoke tests
+        run: |
+          sleep 60  # Wait for deployment to stabilize
+
+          # Health checks
+          curl -f https://staging.n8n-streamdeck.example.com/health || exit 1
+          curl -f https://staging.n8n-streamdeck.example.com/api/health || exit 1
+
+          # Version check
+          VERSION=$(curl -s https://staging.n8n-streamdeck.example.com/api/health | jq -r '.version')
+          if [[ "$VERSION" != "${{ needs.validate.outputs.version }}" ]]; then
+            echo "Version mismatch: expected ${{ needs.validate.outputs.version }}, got $VERSION"
+            exit 1
+          fi
+
+      - name: Run staging integration tests
+        run: |
+          # Run a subset of integration tests against staging
+          export TEST_BASE_URL=https://staging.n8n-streamdeck.example.com
+          pnpm --filter @n8n-streamdeck/backend test -- --testPathPattern=staging
+        continue-on-error: true
+
+  # Job 6: Deploy to Production
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [validate, build, docker, security, deploy-staging]
+    timeout-minutes: 30
+    if: |
+      (github.event_name == 'release' && needs.validate.outputs.is-prerelease == 'false') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'production')
+    environment:
+      name: production
+      url: https://n8n-streamdeck.example.com
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download release artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: ${{ needs.build.outputs.artifact-name }}
+
+      - name: Setup deployment environment
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y sshpass rsync
+
+      - name: Pre-deployment backup
+        run: |
+          # Create backup before deployment
+          export BACKUP_ENV=production
+          ./scripts/backup.sh
+        env:
+          PRODUCTION_HOST: ${{ secrets.PRODUCTION_HOST }}
+          PRODUCTION_USER: ${{ secrets.PRODUCTION_USER }}
+          PRODUCTION_SSH_KEY: ${{ secrets.PRODUCTION_SSH_KEY }}
+
+      - name: Deploy to production
+        run: |
+          export DEPLOY_ENV=production
+          export IMAGE_TAG=${{ needs.validate.outputs.version }}
+          export DOCKER_REGISTRY_TOKEN=${{ secrets.GITHUB_TOKEN }}
+          ./scripts/deploy.sh production
+        env:
+          PRODUCTION_HOST: ${{ secrets.PRODUCTION_HOST }}
+          PRODUCTION_USER: ${{ secrets.PRODUCTION_USER }}
+          PRODUCTION_SSH_KEY: ${{ secrets.PRODUCTION_SSH_KEY }}
+
+      - name: Run production smoke tests
+        run: |
+          sleep 120  # Wait for deployment to stabilize
+
+          # Health checks
+          curl -f https://n8n-streamdeck.example.com/health || exit 1
+          curl -f https://n8n-streamdeck.example.com/api/health || exit 1
+
+          # Version check
+          VERSION=$(curl -s https://n8n-streamdeck.example.com/api/health | jq -r '.version')
+          if [[ "$VERSION" != "${{ needs.validate.outputs.version }}" ]]; then
+            echo "Version mismatch: expected ${{ needs.validate.outputs.version }}, got $VERSION"
+            exit 1
+          fi
+
+          # Performance check
+          RESPONSE_TIME=$(curl -o /dev/null -s -w '%{time_total}' https://n8n-streamdeck.example.com)
+          if (( $(echo "$RESPONSE_TIME > 2.0" | bc -l) )); then
+            echo "Response time too slow: ${RESPONSE_TIME}s"
+            exit 1
+          fi
+
+      - name: Update deployment status
+        run: |
+          # Update deployment tracking
+          echo "Deployment successful: v${{ needs.validate.outputs.version }}" >> deployment.log
+          echo "Timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")" >> deployment.log
+          echo "Commit: ${{ github.sha }}" >> deployment.log
+
+  # Job 7: Post-Deployment
+  post-deployment:
+    name: Post-Deployment Tasks
+    runs-on: ubuntu-latest
+    needs: [validate, deploy-production]
+    if: always() && needs.deploy-production.result == 'success'
+
+    steps:
+      - name: Update GitHub release
+        if: github.event_name == 'release'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            await github.rest.repos.updateRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              release_id: ${{ github.event.release.id }},
+              body: `${{ github.event.release.body }}\n\n## Deployment Status\n✅ Successfully deployed to production\n🕐 Deployed at: ${new Date().toISOString()}`
+            });
+
+      - name: Create deployment tag
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git tag -a "v${{ needs.validate.outputs.version }}" -m "Release v${{ needs.validate.outputs.version }}"
+          git push origin "v${{ needs.validate.outputs.version }}"
+
+      - name: Notify deployment success
+        uses: 8398a7/action-slack@v3
+        if: success()
+        with:
+          status: success
+          text: |
+            🚀 Production deployment successful!
+            Version: v${{ needs.validate.outputs.version }}
+            URL: https://n8n-streamdeck.example.com
+            Commit: ${{ github.sha }}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+      - name: Create GitHub deployment
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const deployment = await github.rest.repos.createDeployment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: context.sha,
+              environment: 'production',
+              description: 'Production deployment v${{ needs.validate.outputs.version }}',
+              auto_merge: false,
+              required_contexts: []
+            });
+
+            await github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: deployment.data.id,
+              state: 'success',
+              environment_url: 'https://n8n-streamdeck.example.com',
+              description: 'Deployment completed successfully'
+            });
+
+  # Job 8: Rollback (if needed)
+  rollback:
+    name: Rollback Deployment
+    runs-on: ubuntu-latest
+    needs: [validate, deploy-production]
+    if: failure() && needs.deploy-production.result == 'failure'
+    environment:
+      name: production
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Rollback production deployment
+        run: |
+          export DEPLOY_ENV=production
+          ./scripts/rollback.sh
+        env:
+          PRODUCTION_HOST: ${{ secrets.PRODUCTION_HOST }}
+          PRODUCTION_USER: ${{ secrets.PRODUCTION_USER }}
+          PRODUCTION_SSH_KEY: ${{ secrets.PRODUCTION_SSH_KEY }}
+
+      - name: Notify rollback
+        uses: 8398a7/action-slack@v3
+        with:
+          status: failure
+          text: |
+            ⚠️ Production deployment failed and was rolled back
+            Version: v${{ needs.validate.outputs.version }}
+            Please check the deployment logs for details.
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}

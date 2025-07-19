@@ -2,6 +2,9 @@
 const nextConfig = {
   transpilePackages: ['@n8n-streamdeck/shared', '@n8n-streamdeck/config'],
 
+  // Enable standalone output for Docker
+  output: 'standalone',
+
   // Performance optimizations
   experimental: {
     optimizeCss: true,

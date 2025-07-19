@@ -1,0 +1,308 @@
+version: '3.8'
+
+services:
+  # Nginx reverse proxy and load balancer
+  nginx:
+    image: nginx:alpine
+    container_name: n8n-streamdeck-nginx
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - ./nginx/nginx.prod.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - nginx-logs:/var/log/nginx
+    networks:
+      - n8n-streamdeck-prod
+    depends_on:
+      - frontend
+      - backend
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD', 'nginx', '-t']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Backend service (multiple instances for load balancing)
+  backend:
+    build:
+      context: .
+      dockerfile: apps/backend/Dockerfile
+      target: runtime
+    deploy:
+      replicas: 2
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - HOST=0.0.0.0
+      - LOG_LEVEL=info
+      - CORS_ORIGINS=https://${DOMAIN:-localhost}
+      - N8N_BASE_URL=${N8N_BASE_URL}
+      - N8N_API_KEY=${N8N_API_KEY}
+      - STREAMDECK_AUTO_CONNECT=true
+      - REDIS_URL=redis://redis:6379
+      - DATABASE_URL=postgresql://n8n_streamdeck:${DB_PASSWORD}@postgres:5432/n8n_streamdeck_prod
+      - JWT_SECRET=${JWT_SECRET}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+    volumes:
+      - backend-logs:/app/logs
+      - backend-data:/app/data
+    networks:
+      - n8n-streamdeck-prod
+    depends_on:
+      - redis
+      - postgres
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "require('http').get('http://localhost:3001/health', (res) => process.exit(res.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Frontend service (multiple instances for load balancing)
+  frontend:
+    build:
+      context: .
+      dockerfile: apps/frontend/Dockerfile
+      target: runtime
+    deploy:
+      replicas: 2
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - HOSTNAME=0.0.0.0
+      - NEXT_PUBLIC_API_URL=https://${DOMAIN:-localhost}/api
+      - NEXT_TELEMETRY_DISABLED=1
+    volumes:
+      - frontend-logs:/app/logs
+    networks:
+      - n8n-streamdeck-prod
+    depends_on:
+      - backend
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "require('http').get('http://localhost:3000', (res) => process.exit(res.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Redis for caching and session storage
+  redis:
+    image: redis:7-alpine
+    container_name: n8n-streamdeck-redis
+    volumes:
+      - redis-data:/data
+      - ./redis/redis.prod.conf:/usr/local/etc/redis/redis.conf:ro
+    command: redis-server /usr/local/etc/redis/redis.conf
+    networks:
+      - n8n-streamdeck-prod
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Production database (PostgreSQL)
+  postgres:
+    image: postgres:15-alpine
+    container_name: n8n-streamdeck-postgres
+    environment:
+      - POSTGRES_DB=n8n_streamdeck_prod
+      - POSTGRES_USER=n8n_streamdeck
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_INITDB_ARGS=--auth-host=scram-sha-256
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - postgres-backups:/backups
+      - ./scripts/init-prod-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    networks:
+      - n8n-streamdeck-prod
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U n8n_streamdeck -d n8n_streamdeck_prod']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Database backup service
+  postgres-backup:
+    image: postgres:15-alpine
+    container_name: n8n-streamdeck-backup
+    environment:
+      - POSTGRES_DB=n8n_streamdeck_prod
+      - POSTGRES_USER=n8n_streamdeck
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - PGPASSWORD=${DB_PASSWORD}
+    volumes:
+      - postgres-backups:/backups
+      - ./scripts/backup.sh:/backup.sh:ro
+    command: >
+      sh -c "
+        while true; do
+          sleep 86400
+          /backup.sh
+        done
+      "
+    networks:
+      - n8n-streamdeck-prod
+    depends_on:
+      - postgres
+    restart: unless-stopped
+
+  # Monitoring with Prometheus
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: n8n-streamdeck-prometheus
+    volumes:
+      - ./monitoring/prometheus.prod.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=15d'
+      - '--web.enable-lifecycle'
+      - '--web.external-url=https://${DOMAIN:-localhost}/prometheus'
+    networks:
+      - n8n-streamdeck-prod
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'wget',
+          '--quiet',
+          '--tries=1',
+          '--spider',
+          'http://localhost:9090/-/healthy',
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Grafana for visualization
+  grafana:
+    image: grafana/grafana:latest
+    container_name: n8n-streamdeck-grafana
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_ROOT_URL=https://${DOMAIN:-localhost}/grafana
+      - GF_SERVER_SERVE_FROM_SUB_PATH=true
+      - GF_SECURITY_COOKIE_SECURE=true
+      - GF_SECURITY_COOKIE_SAMESITE=strict
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    networks:
+      - n8n-streamdeck-prod
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'wget',
+          '--quiet',
+          '--tries=1',
+          '--spider',
+          'http://localhost:3000/api/health',
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Log aggregation with Loki
+  loki:
+    image: grafana/loki:latest
+    container_name: n8n-streamdeck-loki
+    ports:
+      - '3100:3100'
+    volumes:
+      - ./monitoring/loki.yml:/etc/loki/local-config.yaml:ro
+      - loki-data:/loki
+    command: -config.file=/etc/loki/local-config.yaml
+    networks:
+      - n8n-streamdeck-prod
+    restart: unless-stopped
+
+  # Log shipping with Promtail
+  promtail:
+    image: grafana/promtail:latest
+    container_name: n8n-streamdeck-promtail
+    volumes:
+      - ./monitoring/promtail.yml:/etc/promtail/config.yml:ro
+      - backend-logs:/var/log/backend:ro
+      - frontend-logs:/var/log/frontend:ro
+      - nginx-logs:/var/log/nginx:ro
+    command: -config.file=/etc/promtail/config.yml
+    networks:
+      - n8n-streamdeck-prod
+    depends_on:
+      - loki
+    restart: unless-stopped
+
+  # SSL certificate management with Certbot
+  certbot:
+    image: certbot/certbot
+    container_name: n8n-streamdeck-certbot
+    volumes:
+      - ./nginx/ssl:/etc/letsencrypt
+      - ./nginx/webroot:/var/www/certbot
+    command: >
+      sh -c "
+        while true; do
+          certbot renew --webroot --webroot-path=/var/www/certbot --quiet
+          sleep 86400
+        done
+      "
+    profiles:
+      - ssl
+    restart: unless-stopped
+
+networks:
+  n8n-streamdeck-prod:
+    driver: bridge
+    name: n8n-streamdeck-prod
+
+volumes:
+  backend-logs:
+    name: n8n-streamdeck-backend-logs
+  backend-data:
+    name: n8n-streamdeck-backend-data
+  frontend-logs:
+    name: n8n-streamdeck-frontend-logs
+  nginx-logs:
+    name: n8n-streamdeck-nginx-logs
+  redis-data:
+    name: n8n-streamdeck-redis-data
+  postgres-data:
+    name: n8n-streamdeck-postgres-data
+  postgres-backups:
+    name: n8n-streamdeck-postgres-backups
+  prometheus-data:
+    name: n8n-streamdeck-prometheus-data
+  grafana-data:
+    name: n8n-streamdeck-grafana-data
+  loki-data:
+    name: n8n-streamdeck-loki-data
