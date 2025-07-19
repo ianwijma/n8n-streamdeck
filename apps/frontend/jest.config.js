@@ -7,7 +7,7 @@ const createJestConfig = nextJest({
 const customJestConfig = {
   displayName: 'frontend',
   setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
-  moduleNameMapping: {
+  moduleNameMapper: {
     '^@n8n-streamdeck/shared$': '<rootDir>/../../packages/shared/src',
     '^@n8n-streamdeck/config$': '<rootDir>/../../packages/config/src',
   },
