@@ -4,8 +4,14 @@ import { mockDevice, mockDisconnectedDevice } from '../../../tests/mocks';
 
 // Mock the hooks
 jest.mock('../../../hooks/useDevices', () => ({
-  useConnectDevice: () => jest.fn(),
-  useDisconnectDevice: () => jest.fn(),
+  useConnectDevice: () => ({
+    mutateAsync: jest.fn(),
+    isPending: false,
+  }),
+  useDisconnectDevice: () => ({
+    mutateAsync: jest.fn(),
+    isPending: false,
+  }),
 }));
 
 describe('DeviceCard', () => {
@@ -20,31 +26,31 @@ describe('DeviceCard', () => {
   it('shows connected status for connected device', () => {
     render(<DeviceCard device={mockDevice} />);
 
-    expect(screen.getByText(/connected/i)).toBeTruthy();
+    expect(screen.getByText('Online')).toBeTruthy();
   });
 
   it('shows disconnected status for disconnected device', () => {
     render(<DeviceCard device={mockDisconnectedDevice} />);
 
-    expect(screen.getByText(/disconnected/i)).toBeTruthy();
+    expect(screen.getByText('Offline')).toBeTruthy();
   });
 
   it('calls onClick when device is clicked', () => {
     const onClick = jest.fn();
     render(<DeviceCard device={mockDevice} onClick={onClick} />);
 
-    fireEvent.click(screen.getByRole('button'));
+    fireEvent.click(screen.getByText('Test StreamDeck'));
     expect(onClick).toHaveBeenCalledWith(mockDevice);
   });
   it('displays button count correctly', () => {
     render(<DeviceCard device={mockDevice} />);
 
-    expect(screen.getByText('15 buttons')).toBeTruthy();
+    expect(screen.getByText('15 (5×3)')).toBeTruthy();
   });
 
   it('shows device layout information', () => {
     render(<DeviceCard device={mockDevice} />);
 
-    expect(screen.getByText('3×5')).toBeTruthy();
+    expect(screen.getByText('5×3')).toBeTruthy();
   });
 });

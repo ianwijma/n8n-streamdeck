@@ -1,10 +1,10 @@
 import { EventEmitter } from 'events';
 import { promises as fs } from 'fs';
-import { 
-  listStreamDecks, 
-  openStreamDeck, 
+import {
+  listStreamDecks,
+  openStreamDeck,
   StreamDeck as StreamDeckDevice,
-  StreamDeckDeviceInfo
+  StreamDeckDeviceInfo,
 } from '@elgato-stream-deck/node';
 import {
   Device,
@@ -16,7 +16,7 @@ import {
   Logger,
   generateUUID,
   createEvent,
-  EventType
+  EventType,
 } from '@n8n-streamdeck/shared';
 import { config } from '../config/environment';
 
@@ -38,7 +38,8 @@ export class StreamDeckService extends EventEmitter {
     this.logger = new Logger({ level: config.logLevel }, 'StreamDeckService');
     this.options = {
       autoConnect: options.autoConnect ?? config.streamdeck.autoConnect,
-      reconnectInterval: options.reconnectInterval ?? config.streamdeck.reconnectInterval,
+      reconnectInterval:
+        options.reconnectInterval ?? config.streamdeck.reconnectInterval,
       maxReconnectAttempts: options.maxReconnectAttempts ?? 10,
     };
 
@@ -55,15 +56,14 @@ export class StreamDeckService extends EventEmitter {
   async discoverDevices(): Promise<Device[]> {
     try {
       this.logger.info('Starting device discovery');
-      
+
       const streamDecks = await listStreamDecks();
       const devices: Device[] = [];
-
       for (const streamDeckInfo of streamDecks) {
         const device = this.mapStreamDeckInfoToDevice(streamDeckInfo);
         devices.push(device);
         this.deviceInfo.set(device.id, device);
-        
+
         this.logger.info('Discovered device', {
           deviceId: device.id,
           name: device.name,
@@ -77,7 +77,9 @@ export class StreamDeckService extends EventEmitter {
       return devices;
     } catch (error) {
       this.logger.error('Device discovery failed', error as Error);
-      throw new Error(`Failed to discover StreamDeck devices: ${(error as Error).message}`);
+      throw new Error(
+        `Failed to discover StreamDeck devices: ${(error as Error).message}`
+      );
     }
   }
 
@@ -95,32 +97,39 @@ export class StreamDeckService extends EventEmitter {
 
       const device = this.deviceInfo.get(deviceId);
       if (!device) {
-        throw new Error(`Device ${deviceId} not found. Run discoverDevices() first.`);
+        throw new Error(
+          `Device ${deviceId} not found. Run discoverDevices() first.`
+        );
       }
 
       // Find the StreamDeck device info
       const streamDecks = await listStreamDecks();
-      const streamDeckInfo = streamDecks.find(sd => this.generateDeviceId(sd) === deviceId);
-      
+      const streamDeckInfo = streamDecks.find(
+        (sd) => this.generateDeviceId(sd) === deviceId
+      );
+
       if (!streamDeckInfo) {
-        throw new Error(`StreamDeck device ${deviceId} not found during connection`);
+        throw new Error(
+          `StreamDeck device ${deviceId} not found during connection`
+        );
       }
 
       // Open the device
       const streamDeck = await openStreamDeck(streamDeckInfo.path);
-      
+
       // Store the connected device
       this.connectedDevices.set(deviceId, streamDeck);
-      
+
       // Update device info
       device.isConnected = true;
       device.updatedAt = new Date();
       try {
-        device.firmwareVersion = await streamDeck.getFirmwareVersion() || 'Unknown';
+        device.firmwareVersion =
+          (await streamDeck.getFirmwareVersion()) || 'Unknown';
       } catch {
         device.firmwareVersion = 'Unknown';
       }
-      
+
       // Set up event listeners
       this.setupDeviceEventListeners(deviceId, streamDeck);
 
@@ -146,24 +155,22 @@ export class StreamDeckService extends EventEmitter {
         }
       );
       this.emit('deviceConnected', connectionEvent);
-
     } catch (error) {
-      this.logger.error('Failed to connect to device', error as Error, { deviceId });
-      
+      this.logger.error('Failed to connect to device', error as Error, {
+        deviceId,
+      });
+
       // Emit error event
-      const errorEvent = createEvent<DeviceErrorEvent>(
-        EventType.DEVICE_ERROR,
-        {
-          deviceId,
-          device: this.deviceInfo.get(deviceId),
-          error: {
-            code: 'CONNECTION_FAILED',
-            message: (error as Error).message,
-          },
-        }
-      );
+      const errorEvent = createEvent<DeviceErrorEvent>(EventType.DEVICE_ERROR, {
+        deviceId,
+        device: this.deviceInfo.get(deviceId),
+        error: {
+          code: 'CONNECTION_FAILED',
+          message: (error as Error).message,
+        },
+      });
       this.emit('deviceError', errorEvent);
-      
+
       throw error;
     }
   }
@@ -183,10 +190,10 @@ export class StreamDeckService extends EventEmitter {
 
       // Close the device
       await streamDeck.close();
-      
+
       // Remove from connected devices
       this.connectedDevices.delete(deviceId);
-      
+
       // Update device info
       const device = this.deviceInfo.get(deviceId);
       if (device) {
@@ -213,9 +220,10 @@ export class StreamDeckService extends EventEmitter {
         }
       );
       this.emit('deviceDisconnected', disconnectionEvent);
-
     } catch (error) {
-      this.logger.error('Failed to disconnect device', error as Error, { deviceId });
+      this.logger.error('Failed to disconnect device', error as Error, {
+        deviceId,
+      });
       throw error;
     }
   }
@@ -223,7 +231,11 @@ export class StreamDeckService extends EventEmitter {
   /**
    * Set button image on a specific device
    */
-  async setButtonImage(deviceId: string, buttonIndex: number, imagePath: string): Promise<void> {
+  async setButtonImage(
+    deviceId: string,
+    buttonIndex: number,
+    imagePath: string
+  ): Promise<void> {
     try {
       const streamDeck = this.connectedDevices.get(deviceId);
       if (!streamDeck) {
@@ -236,7 +248,9 @@ export class StreamDeckService extends EventEmitter {
       }
 
       if (buttonIndex < 0 || buttonIndex >= device.buttonCount) {
-        throw new Error(`Button index ${buttonIndex} is out of range for device ${deviceId}`);
+        throw new Error(
+          `Button index ${buttonIndex} is out of range for device ${deviceId}`
+        );
       }
 
       this.logger.info('Setting button image', {
@@ -247,7 +261,7 @@ export class StreamDeckService extends EventEmitter {
 
       // Read image file
       const imageBuffer = await fs.readFile(imagePath);
-      
+
       // Set the button image
       await streamDeck.fillKeyBuffer(buttonIndex, imageBuffer);
 
@@ -256,7 +270,6 @@ export class StreamDeckService extends EventEmitter {
         buttonIndex,
         imageSize: imageBuffer.length,
       });
-
     } catch (error) {
       this.logger.error('Failed to set button image', error as Error, {
         deviceId,
@@ -278,7 +291,9 @@ export class StreamDeckService extends EventEmitter {
    * Get all connected devices
    */
   getConnectedDevices(): Device[] {
-    return Array.from(this.deviceInfo.values()).filter(device => device.isConnected);
+    return Array.from(this.deviceInfo.values()).filter(
+      (device) => device.isConnected
+    );
   }
 
   /**
@@ -308,14 +323,19 @@ export class StreamDeckService extends EventEmitter {
     this.reconnectTimers.clear();
 
     // Disconnect all devices
-    const disconnectPromises = Array.from(this.connectedDevices.keys()).map(deviceId =>
-      this.disconnectDevice(deviceId).catch(error =>
-        this.logger.error('Error disconnecting device during shutdown', error, { deviceId })
-      )
+    const disconnectPromises = Array.from(this.connectedDevices.keys()).map(
+      (deviceId) =>
+        this.disconnectDevice(deviceId).catch((error) =>
+          this.logger.error(
+            'Error disconnecting device during shutdown',
+            error,
+            { deviceId }
+          )
+        )
     );
 
     await Promise.all(disconnectPromises);
-    
+
     // Remove all listeners
     this.removeAllListeners();
 
@@ -325,7 +345,10 @@ export class StreamDeckService extends EventEmitter {
   /**
    * Set up event listeners for a connected device
    */
-  private setupDeviceEventListeners(deviceId: string, streamDeck: StreamDeckDevice): void {
+  private setupDeviceEventListeners(
+    deviceId: string,
+    streamDeck: StreamDeckDevice
+  ): void {
     // Button press events
     streamDeck.on('down', (control) => {
       if ('index' in control) {
@@ -336,13 +359,19 @@ export class StreamDeckService extends EventEmitter {
     streamDeck.on('up', (control) => {
       if ('index' in control) {
         // Handle button release if needed
-        this.logger.debug('Button released', { deviceId, buttonIndex: control.index });
+        this.logger.debug('Button released', {
+          deviceId,
+          buttonIndex: control.index,
+        });
       }
     });
 
     // Device error events
     streamDeck.on('error', (error: unknown) => {
-      this.handleDeviceError(deviceId, error instanceof Error ? error : new Error(String(error)));
+      this.handleDeviceError(
+        deviceId,
+        error instanceof Error ? error : new Error(String(error))
+      );
     });
 
     // Device disconnection events - using a different approach since 'close' might not be available
@@ -352,9 +381,13 @@ export class StreamDeckService extends EventEmitter {
   /**
    * Handle button press events
    */
-  private handleButtonPress(deviceId: string, buttonIndex: number, pressType: 'short' | 'long' | 'double'): void {
+  private handleButtonPress(
+    deviceId: string,
+    buttonIndex: number,
+    pressType: 'short' | 'long' | 'double'
+  ): void {
     const device = this.deviceInfo.get(deviceId);
-    
+
     this.logger.info('Button pressed', {
       deviceId,
       buttonIndex,
@@ -382,18 +415,15 @@ export class StreamDeckService extends EventEmitter {
     this.logger.error('Device error occurred', error, { deviceId });
 
     const device = this.deviceInfo.get(deviceId);
-    const errorEvent = createEvent<DeviceErrorEvent>(
-      EventType.DEVICE_ERROR,
-      {
-        deviceId,
-        device,
-        error: {
-          code: 'DEVICE_ERROR',
-          message: error.message,
-          details: { stack: error.stack },
-        },
-      }
-    );
+    const errorEvent = createEvent<DeviceErrorEvent>(EventType.DEVICE_ERROR, {
+      deviceId,
+      device,
+      error: {
+        code: 'DEVICE_ERROR',
+        message: error.message,
+        details: { stack: error.stack },
+      },
+    });
 
     this.emit('deviceError', errorEvent);
   }
@@ -401,12 +431,15 @@ export class StreamDeckService extends EventEmitter {
   /**
    * Handle device disconnection
    */
-  private handleDeviceDisconnection(deviceId: string, reason: 'user-disconnect' | 'cable-unplugged' | 'error' | 'timeout'): void {
+  private handleDeviceDisconnection(
+    deviceId: string,
+    reason: 'user-disconnect' | 'cable-unplugged' | 'error' | 'timeout'
+  ): void {
     this.logger.warn('Device disconnected unexpectedly', { deviceId, reason });
 
     // Remove from connected devices
     this.connectedDevices.delete(deviceId);
-    
+
     // Update device info
     const device = this.deviceInfo.get(deviceId);
     if (device) {
@@ -461,9 +494,11 @@ export class StreamDeckService extends EventEmitter {
   /**
    * Map StreamDeck device info to our Device interface
    */
-  private mapStreamDeckInfoToDevice(streamDeckInfo: StreamDeckDeviceInfo): Device {
+  private mapStreamDeckInfoToDevice(
+    streamDeckInfo: StreamDeckDeviceInfo
+  ): Device {
     const deviceId = this.generateDeviceId(streamDeckInfo);
-    
+
     return {
       id: deviceId,
       name: this.getDeviceName(streamDeckInfo.model),
@@ -490,7 +525,7 @@ export class StreamDeckService extends EventEmitter {
    */
   private getDeviceName(model: any): string {
     const modelStr = String(model).toLowerCase();
-    
+
     if (modelStr.includes('mini')) {
       return 'StreamDeck Mini';
     } else if (modelStr.includes('xl')) {
@@ -500,7 +535,7 @@ export class StreamDeckService extends EventEmitter {
     } else if (modelStr.includes('plus')) {
       return 'StreamDeck Plus';
     }
-    
+
     return 'StreamDeck Original';
   }
 
@@ -510,7 +545,7 @@ export class StreamDeckService extends EventEmitter {
   private mapDeviceType(model: any): DeviceType {
     // Convert model to string for comparison since the API might return different types
     const modelStr = String(model);
-    
+
     if (modelStr.includes('mini') || modelStr.includes('Mini')) {
       return DeviceType.STREAMDECK_MINI;
     } else if (modelStr.includes('xl') || modelStr.includes('XL')) {
@@ -520,7 +555,7 @@ export class StreamDeckService extends EventEmitter {
     } else if (modelStr.includes('plus') || modelStr.includes('Plus')) {
       return DeviceType.STREAMDECK_PLUS;
     }
-    
+
     return DeviceType.STREAMDECK_ORIGINAL;
   }
 
@@ -529,7 +564,7 @@ export class StreamDeckService extends EventEmitter {
    */
   private getButtonCount(model: any): number {
     const modelStr = String(model).toLowerCase();
-    
+
     if (modelStr.includes('mini')) {
       return 6;
     } else if (modelStr.includes('xl')) {
@@ -537,7 +572,7 @@ export class StreamDeckService extends EventEmitter {
     } else if (modelStr.includes('plus')) {
       return 8;
     }
-    
+
     return 15; // Default for original StreamDeck
   }
 }

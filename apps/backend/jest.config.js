@@ -7,11 +7,6 @@ module.exports = {
   transform: {
     '^.+\\.ts$': 'ts-jest',
   },
-  moduleNameMapping: {
-    '^@n8n-streamdeck/shared$': '<rootDir>/../../packages/shared/src',
-    '^@n8n-streamdeck/config$': '<rootDir>/../../packages/config/src',
-  },
-
   // Coverage configuration
   collectCoverage: false, // Enable with --coverage flag
   collectCoverageFrom: [
@@ -57,7 +52,7 @@ module.exports = {
   },
 
   // Module name mapping for workspace packages and mocks
-  moduleNameMapping: {
+  moduleNameMapper: {
     '^@n8n-streamdeck/shared$': '<rootDir>/../../packages/shared/src',
     '^@n8n-streamdeck/config$': '<rootDir>/../../packages/config/src',
     '^@elgato-stream-deck/node$':
