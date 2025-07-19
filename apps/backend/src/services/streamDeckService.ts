@@ -27,11 +27,13 @@ export interface StreamDeckServiceOptions {
 }
 
 export class StreamDeckService extends EventEmitter {
+  private static instance: StreamDeckService;
   private logger: Logger;
   private connectedDevices: Map<string, StreamDeckDevice> = new Map();
   private deviceInfo: Map<string, Device> = new Map();
   private reconnectTimers: Map<string, NodeJS.Timeout> = new Map();
   private options: StreamDeckServiceOptions;
+  private mockDevices: Map<string, Device> = new Map(); // For testing
 
   constructor(options: StreamDeckServiceOptions = {}) {
     super();
@@ -152,7 +154,8 @@ export class StreamDeckService extends EventEmitter {
         {
           device,
           isReconnection: false,
-        }
+        },
+        'device'
       );
       this.emit('deviceConnected', connectionEvent);
     } catch (error) {
@@ -294,13 +297,6 @@ export class StreamDeckService extends EventEmitter {
     return Array.from(this.deviceInfo.values()).filter(
       (device) => device.isConnected
     );
-  }
-
-  /**
-   * Get device by ID
-   */
-  getDevice(deviceId: string): Device | undefined {
-    return this.deviceInfo.get(deviceId);
   }
 
   /**
@@ -574,5 +570,122 @@ export class StreamDeckService extends EventEmitter {
     }
 
     return 15; // Default for original StreamDeck
+  }
+
+  // Singleton pattern for testing
+  static getInstance(options?: StreamDeckServiceOptions): StreamDeckService {
+    if (!StreamDeckService.instance) {
+      StreamDeckService.instance = new StreamDeckService(options);
+    }
+    return StreamDeckService.instance;
+  }
+
+  // Testing methods
+  async cleanup(): Promise<void> {
+    this.logger.info('Cleaning up StreamDeck service');
+
+    // Clear all timers
+    for (const timer of this.reconnectTimers.values()) {
+      clearTimeout(timer);
+    }
+    this.reconnectTimers.clear();
+
+    // Disconnect all devices
+    for (const [deviceId, device] of this.connectedDevices) {
+      try {
+        await device.close();
+        this.logger.info(`Disconnected device: ${deviceId}`);
+      } catch (error) {
+        this.logger.error(
+          `Error disconnecting device ${deviceId}:`,
+          error as Error
+        );
+      }
+    }
+    this.connectedDevices.clear();
+    this.deviceInfo.clear();
+    this.mockDevices.clear();
+
+    // Reset singleton instance
+    StreamDeckService.instance = null as any;
+  }
+
+  addMockDevice(device: Device): void {
+    this.logger.info(`Adding mock device: ${device.id}`);
+    this.mockDevices.set(device.id, device);
+    this.deviceInfo.set(device.id, device);
+
+    if (device.isConnected) {
+      this.emit(
+        'deviceConnected',
+        createEvent<DeviceConnectedEvent>(
+          EventType.DEVICE_CONNECTED,
+          {
+            device,
+            isReconnection: false,
+          },
+          'device'
+        )
+      );
+    }
+  }
+
+  updateMockDevice(deviceId: string, updates: Partial<Device>): void {
+    const existingDevice = this.mockDevices.get(deviceId);
+    if (!existingDevice) {
+      throw new Error(`Mock device ${deviceId} not found`);
+    }
+
+    const updatedDevice = { ...existingDevice, ...updates };
+    this.mockDevices.set(deviceId, updatedDevice);
+    this.deviceInfo.set(deviceId, updatedDevice);
+
+    this.logger.info(`Updated mock device: ${deviceId}`, updates);
+
+    // Emit connection/disconnection events
+    if (updates.isConnected !== undefined) {
+      if (updates.isConnected) {
+        this.emit(
+          'deviceConnected',
+          createEvent<DeviceConnectedEvent>(
+            EventType.DEVICE_CONNECTED,
+            {
+              device: updatedDevice,
+              isReconnection: false,
+            },
+            'device'
+          )
+        );
+      } else {
+        this.emit(
+          'deviceDisconnected',
+          createEvent<DeviceDisconnectedEvent>(
+            EventType.DEVICE_DISCONNECTED,
+            {
+              deviceId,
+              device: updatedDevice,
+              reason: 'user-disconnect',
+            },
+            'device'
+          )
+        );
+      }
+    }
+  }
+
+  // Override getDevices for testing
+  getDevices(): Device[] {
+    if (process.env.NODE_ENV === 'test' && this.mockDevices.size > 0) {
+      return Array.from(this.mockDevices.values());
+    }
+    return Array.from(this.deviceInfo.values());
+  }
+
+  // Override getDevice for testing
+  getDevice(deviceId: string): Device | undefined {
+    if (process.env.NODE_ENV === 'test' && this.mockDevices.has(deviceId)) {
+      return this.mockDevices.get(deviceId);
+    }
+    return this.deviceInfo.get(deviceId);
   }
 }

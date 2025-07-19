@@ -1,0 +1,28 @@
+FROM mcr.microsoft.com/playwright:v1.40.0-focal
+
+WORKDIR /app
+
+# Install Node.js and pnpm
+RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && \
+    apt-get install -y nodejs && \
+    npm install -g pnpm
+
+# Copy package files
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY tests/package.json ./tests/
+
+# Install dependencies
+RUN pnpm install --frozen-lockfile
+
+# Copy test files
+COPY tests ./tests
+
+# Install Playwright browsers
+RUN pnpm --filter tests exec playwright install
+
+# Set environment variables
+ENV CI=true
+ENV NODE_ENV=test
+
+# Run tests
+CMD ["pnpm", "--filter", "tests", "test:integration"]

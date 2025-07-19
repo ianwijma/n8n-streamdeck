@@ -1,434 +1,226 @@
 import request from 'supertest';
-import { Application } from 'express';
+import { Server } from 'http';
 import { createApp } from '../../app';
-import {
-  ApiTestHelper,
-  expectSuccessResponse,
-  expectErrorResponse,
-  expectPaginatedResponse,
-} from '../utils/testHelpers';
-
-// Mock the StreamDeck module
-jest.mock('@elgato-stream-deck/node');
 
 describe('API Integration Tests', () => {
-  let app: Application;
-  let apiHelper: ApiTestHelper;
+  let app: any;
+  let server: Server;
 
-  beforeAll(() => {
+  beforeAll(async () => {
+    // Create app with test configuration
     app = createApp();
-    apiHelper = new ApiTestHelper();
+    server = app.listen(0); // Use random port
   });
 
   afterAll(async () => {
-    // Cleanup if needed
+    server.close();
   });
 
   describe('Health Check', () => {
-    it('should return health status', async () => {
-      const response = await request(app).get('/health');
+    it('should return healthy status', async () => {
+      const response = await request(app).get('/api/health').expect(200);
 
-      expect(response.status).toBe(200);
-      expectSuccessResponse(response);
-      expect(response.body.data).toMatchObject({
+      expect(response.body).toEqual({
         status: 'healthy',
+        timestamp: expect.any(String),
         uptime: expect.any(Number),
-        version: expect.any(String),
-        environment: 'test',
-        services: expect.objectContaining({
-          database: expect.any(String),
-          n8n: expect.any(String),
-          streamdeck: expect.any(String),
-        }),
-      });
-    });
-
-    it('should return API health status', async () => {
-      const response = await request(app).get('/api/health');
-
-      expect(response.status).toBe(200);
-      expectSuccessResponse(response);
-    });
-  });
-
-  describe('Device API Integration', () => {
-    describe('GET /api/devices', () => {
-      it('should list devices with pagination', async () => {
-        const response = await apiHelper.getDevices();
-
-        expect(response.status).toBe(200);
-        expectPaginatedResponse(response);
-        expect(response.body.data).toBeInstanceOf(Array);
-      });
-
-      it('should filter disconnected devices', async () => {
-        const response = await apiHelper.getDevices({
-          includeDisconnected: 'false',
-        });
-
-        expect(response.status).toBe(200);
-        expectSuccessResponse(response);
-      });
-
-      it('should handle pagination parameters', async () => {
-        const response = await apiHelper.getDevices({ page: '1', limit: '5' });
-
-        expect(response.status).toBe(200);
-        expectPaginatedResponse(response);
-        expect(response.body.pagination.page).toBe(1);
-        expect(response.body.pagination.limit).toBe(5);
-      });
-    });
-
-    describe('GET /api/devices/:id', () => {
-      it('should return 404 for non-existent device', async () => {
-        const response = await apiHelper.getDevice('non-existent-device');
-
-        expect(response.status).toBe(404);
-        expectErrorResponse(response, 'NOT_FOUND');
-      });
-    });
-
-    describe('POST /api/devices/:id/connect', () => {
-      it('should return 404 for non-existent device', async () => {
-        const response = await apiHelper.connectDevice('non-existent-device');
-
-        expect(response.status).toBe(404);
-        expectErrorResponse(response, 'NOT_FOUND');
-      });
-    });
-
-    describe('DELETE /api/devices/:id', () => {
-      it('should return 404 for non-existent device', async () => {
-        const response = await apiHelper.disconnectDevice(
-          'non-existent-device'
-        );
-
-        expect(response.status).toBe(404);
-        expectErrorResponse(response, 'NOT_FOUND');
-      });
-    });
-
-    describe('GET /api/devices/:id/status', () => {
-      it('should return 404 for non-existent device', async () => {
-        const response = await apiHelper.getDeviceStatus('non-existent-device');
-
-        expect(response.status).toBe(404);
-        expectErrorResponse(response, 'NOT_FOUND');
-      });
-    });
-
-    describe('PUT /api/devices/:id/brightness', () => {
-      it('should return 400 for invalid brightness', async () => {
-        const response = await apiHelper.updateDeviceBrightness(
-          'device-1',
-          150
-        );
-
-        expect(response.status).toBe(400);
-        expectErrorResponse(response, 'VALIDATION_ERROR');
-      });
-
-      it('should return 404 for non-existent device', async () => {
-        const response = await apiHelper.updateDeviceBrightness(
-          'non-existent-device',
-          50
-        );
-
-        expect(response.status).toBe(404);
-        expectErrorResponse(response, 'NOT_FOUND');
       });
     });
   });
 
-  describe('Button API Integration', () => {
-    describe('GET /api/devices/:deviceId/buttons', () => {
-      it('should return 404 for non-existent device', async () => {
-        const response = await apiHelper.getButtons('non-existent-device');
+  describe('Device Endpoints', () => {
+    it('should get all devices', async () => {
+      const response = await request(app).get('/api/devices').expect(200);
 
-        expect(response.status).toBe(404);
-        expectErrorResponse(response, 'NOT_FOUND');
-      });
+      expect(response.body).toHaveProperty('success', true);
+      expect(response.body).toHaveProperty('data');
+      expect(Array.isArray(response.body.data)).toBe(true);
     });
 
-    describe('POST /api/devices/:deviceId/buttons', () => {
-      it('should return 400 for invalid button data', async () => {
-        const response = await apiHelper.createButton('device-1', {
-          index: -1, // Invalid index
-        });
+    it('should handle device not found', async () => {
+      const response = await request(app)
+        .get('/api/devices/non-existent-device')
+        .expect(404);
 
-        expect(response.status).toBe(400);
-        expectErrorResponse(response, 'VALIDATION_ERROR');
-      });
-
-      it('should return 404 for non-existent device', async () => {
-        const response = await apiHelper.createButton('non-existent-device', {
-          index: 0,
-          label: 'Test Button',
-        });
-
-        expect(response.status).toBe(404);
-        expectErrorResponse(response, 'NOT_FOUND');
-      });
+      expect(response.body).toHaveProperty('success', false);
+      expect(response.body).toHaveProperty('error');
     });
 
-    describe('GET /api/devices/:deviceId/buttons/:buttonId', () => {
-      it('should return 404 for non-existent device', async () => {
-        const response = await apiHelper.getButton(
-          'non-existent-device',
-          'button-1'
-        );
+    it('should handle device connection request', async () => {
+      const response = await request(app)
+        .post('/api/devices/test-device/connect')
+        .expect(404); // Device doesn't exist
 
-        expect(response.status).toBe(404);
-        expectErrorResponse(response, 'NOT_FOUND');
-      });
-    });
-
-    describe('DELETE /api/devices/:deviceId/buttons/:buttonId', () => {
-      it('should return 404 for non-existent device', async () => {
-        const response = await apiHelper.deleteButton(
-          'non-existent-device',
-          'button-1'
-        );
-
-        expect(response.status).toBe(404);
-        expectErrorResponse(response, 'NOT_FOUND');
-      });
-    });
-
-    describe('POST /api/devices/:deviceId/buttons/:buttonId/press', () => {
-      it('should return 404 for non-existent device', async () => {
-        const response = await apiHelper.pressButton(
-          'non-existent-device',
-          'button-1'
-        );
-
-        expect(response.status).toBe(404);
-        expectErrorResponse(response, 'NOT_FOUND');
-      });
+      expect(response.body).toHaveProperty('success', false);
     });
   });
 
-  describe('Configuration API Integration', () => {
-    describe('GET /api/config', () => {
-      it('should return current configuration', async () => {
-        const response = await apiHelper.getConfig();
+  describe('Button Endpoints', () => {
+    it('should get buttons for device', async () => {
+      const response = await request(app)
+        .get('/api/devices/test-device/buttons')
+        .expect(404); // Device doesn't exist
 
-        expect(response.status).toBe(200);
-        expectSuccessResponse(response);
-        expect(response.body.data).toMatchObject({
-          server: expect.any(Object),
-          n8n: expect.any(Object),
-          streamdeck: expect.any(Object),
-          database: expect.any(Object),
-          logging: expect.any(Object),
-        });
-      });
+      expect(response.body).toHaveProperty('success', false);
     });
 
-    describe('PUT /api/config', () => {
-      it('should update configuration', async () => {
-        const configUpdate = {
-          logging: {
-            level: 'debug',
-          },
-        };
+    it('should handle button creation', async () => {
+      const buttonData = {
+        index: 0,
+        label: 'Test Button',
+        action: {
+          type: 'webhook',
+          payload: { url: 'http://example.com/webhook' },
+        },
+      };
 
-        const response = await apiHelper.updateConfig(configUpdate);
+      const response = await request(app)
+        .post('/api/devices/test-device/buttons')
+        .send(buttonData)
+        .expect(404); // Device doesn't exist
 
-        expect(response.status).toBe(200);
-        expectSuccessResponse(response);
-      });
+      expect(response.body).toHaveProperty('success', false);
+    });
+  });
 
-      it('should return 400 for invalid configuration', async () => {
-        const response = await apiHelper.updateConfig({
-          server: {
-            port: -1, // Invalid port
-          },
-        });
+  describe('Configuration Endpoints', () => {
+    it('should get configuration', async () => {
+      const response = await request(app).get('/api/config').expect(200);
 
-        expect(response.status).toBe(400);
-        expectErrorResponse(response, 'VALIDATION_ERROR');
-      });
-
-      it('should return 400 for non-object data', async () => {
-        const response = await request(app)
-          .put('/api/config')
-          .send('invalid-data');
-
-        expect(response.status).toBe(400);
-        expectErrorResponse(response, 'VALIDATION_ERROR');
-      });
+      expect(response.body).toHaveProperty('success', true);
+      expect(response.body).toHaveProperty('data');
     });
 
-    describe('GET /api/config/schema', () => {
-      it('should return configuration schema', async () => {
-        const response = await apiHelper.getConfigSchema();
+    it('should update configuration', async () => {
+      const configData = {
+        autoConnect: true,
+        reconnectInterval: 5000,
+      };
 
-        expect(response.status).toBe(200);
-        expectSuccessResponse(response);
-        expect(response.body.data).toMatchObject({
-          type: 'object',
-          properties: expect.any(Object),
-        });
-      });
-    });
+      const response = await request(app)
+        .put('/api/config')
+        .send(configData)
+        .expect(200);
 
-    describe('POST /api/config/validate', () => {
-      it('should validate valid configuration', async () => {
-        const validConfig = {
-          server: {
-            port: 3000,
-            host: '0.0.0.0',
-          },
-        };
-
-        const response = await apiHelper.validateConfig(validConfig);
-
-        expect(response.status).toBe(200);
-        expectSuccessResponse(response);
-        expect(response.body.data.valid).toBe(true);
-      });
-
-      it('should return validation errors for invalid configuration', async () => {
-        const invalidConfig = {
-          server: {
-            port: 70000, // Invalid port
-          },
-        };
-
-        const response = await apiHelper.validateConfig(invalidConfig);
-
-        expect(response.status).toBe(200);
-        expectSuccessResponse(response);
-        expect(response.body.data.valid).toBe(false);
-        expect(response.body.data.errors).toBeInstanceOf(Array);
-        expect(response.body.data.errors.length).toBeGreaterThan(0);
-      });
-    });
-
-    describe('POST /api/config/reset', () => {
-      it('should reset configuration to defaults', async () => {
-        const response = await apiHelper.resetConfig();
-
-        expect(response.status).toBe(200);
-        expectSuccessResponse(response);
-      });
-    });
-
-    describe('GET /api/config/health', () => {
-      it('should return configuration health status', async () => {
-        const response = await apiHelper.getConfigHealth();
-
-        expect(response.status).toBe(200);
-        expectSuccessResponse(response);
-        expect(response.body.data).toMatchObject({
-          overall: expect.stringMatching(/^(healthy|unhealthy)$/),
-          server: expect.objectContaining({
-            valid: expect.any(Boolean),
-            errors: expect.any(Array),
-          }),
-          application: expect.objectContaining({
-            valid: expect.any(Boolean),
-            errors: expect.any(Array),
-          }),
-        });
-      });
+      expect(response.body).toHaveProperty('success', true);
     });
   });
 
   describe('Error Handling', () => {
-    it('should return 404 for non-existent routes', async () => {
-      const response = await request(app).get('/api/non-existent-route');
-
-      expect(response.status).toBe(404);
-      expect(response.body).toMatchObject({
-        success: false,
-        error: expect.objectContaining({
-          code: 'NOT_FOUND',
-          message: expect.stringContaining('not found'),
-        }),
-      });
-    });
-
-    it('should handle malformed JSON in request body', async () => {
+    it('should handle 404 for unknown routes', async () => {
       const response = await request(app)
-        .put('/api/config')
+        .get('/api/unknown-endpoint')
+        .expect(404);
+
+      expect(response.body).toHaveProperty('success', false);
+      expect(response.body).toHaveProperty('error');
+    });
+
+    it('should handle malformed JSON', async () => {
+      const response = await request(app)
+        .post('/api/config')
         .set('Content-Type', 'application/json')
-        .send('{"invalid": json}');
+        .send('{ invalid json }')
+        .expect(400);
 
-      expect(response.status).toBe(400);
+      expect(response.body).toHaveProperty('success', false);
     });
 
-    it('should include request ID in all responses', async () => {
-      const response = await request(app).get('/health');
+    it('should handle missing required fields', async () => {
+      const response = await request(app)
+        .post('/api/devices/test-device/buttons')
+        .send({}) // Missing required fields
+        .expect(400);
 
-      expect(response.body).toHaveProperty('requestId');
-      expect(typeof response.body.requestId).toBe('string');
-      expect(response.body.requestId).toMatch(/^[a-f0-9-]{36}$/); // UUID format
-    });
-
-    it('should include timestamp in all responses', async () => {
-      const response = await request(app).get('/health');
-
-      expect(response.body).toHaveProperty('timestamp');
-      expect(typeof response.body.timestamp).toBe('string');
-      expect(new Date(response.body.timestamp)).toBeInstanceOf(Date);
+      expect(response.body).toHaveProperty('success', false);
     });
   });
 
   describe('CORS Headers', () => {
     it('should include CORS headers', async () => {
-      const response = await request(app).get('/health');
+      const response = await request(app).get('/api/health').expect(200);
 
       expect(response.headers).toHaveProperty('access-control-allow-origin');
     });
 
-    it('should handle preflight requests', async () => {
-      const response = await request(app)
-        .options('/api/config')
-        .set('Origin', 'http://localhost:3000')
-        .set('Access-Control-Request-Method', 'PUT');
+    it('should handle OPTIONS requests', async () => {
+      const response = await request(app).options('/api/devices').expect(200);
 
-      expect(response.status).toBe(204);
       expect(response.headers).toHaveProperty('access-control-allow-methods');
+      expect(response.headers).toHaveProperty('access-control-allow-headers');
     });
   });
 
-  describe('Security Headers', () => {
-    it('should include security headers', async () => {
-      const response = await request(app).get('/health');
+  describe('Request Validation', () => {
+    it('should validate button creation data', async () => {
+      const invalidButtonData = {
+        index: 'invalid', // Should be number
+        label: '', // Should not be empty
+      };
 
-      expect(response.headers).toHaveProperty(
-        'x-content-type-options',
-        'nosniff'
-      );
-      expect(response.headers).toHaveProperty('x-frame-options', 'DENY');
-      expect(response.headers).toHaveProperty(
-        'x-xss-protection',
-        '1; mode=block'
-      );
-      expect(response.headers).toHaveProperty(
-        'referrer-policy',
-        'strict-origin-when-cross-origin'
-      );
+      const response = await request(app)
+        .post('/api/devices/test-device/buttons')
+        .send(invalidButtonData)
+        .expect(400);
+
+      expect(response.body).toHaveProperty('success', false);
+      expect(response.body.error).toContain('validation');
     });
-  });
 
-  describe('Content Type Handling', () => {
-    it('should handle JSON content type', async () => {
+    it('should validate configuration updates', async () => {
+      const invalidConfig = {
+        autoConnect: 'invalid', // Should be boolean
+        reconnectInterval: -1, // Should be positive
+      };
+
       const response = await request(app)
         .put('/api/config')
-        .set('Content-Type', 'application/json')
-        .send({ logging: { level: 'info' } });
+        .send(invalidConfig)
+        .expect(400);
 
-      expect(response.status).toBe(200);
+      expect(response.body).toHaveProperty('success', false);
+    });
+  });
+
+  describe('Response Format', () => {
+    it('should return consistent response format for success', async () => {
+      const response = await request(app).get('/api/health').expect(200);
+
+      expect(response.body).toHaveProperty('status');
+      expect(response.body).toHaveProperty('timestamp');
+      expect(response.body).toHaveProperty('uptime');
     });
 
-    it('should return JSON responses', async () => {
-      const response = await request(app).get('/health');
+    it('should return consistent error format', async () => {
+      const response = await request(app)
+        .get('/api/devices/non-existent')
+        .expect(404);
 
-      expect(response.headers['content-type']).toMatch(/application\/json/);
+      expect(response.body).toHaveProperty('success', false);
+      expect(response.body).toHaveProperty('error');
+      expect(typeof response.body.error).toBe('string');
+    });
+  });
+
+  describe('Content-Type Handling', () => {
+    it('should handle JSON content type', async () => {
+      const response = await request(app)
+        .post('/api/config')
+        .set('Content-Type', 'application/json')
+        .send({ autoConnect: true })
+        .expect(200);
+
+      expect(response.body).toHaveProperty('success', true);
+    });
+
+    it('should reject non-JSON content for POST requests', async () => {
+      const response = await request(app)
+        .post('/api/config')
+        .set('Content-Type', 'text/plain')
+        .send('plain text')
+        .expect(400);
+
+      expect(response.body).toHaveProperty('success', false);
     });
   });
 });

@@ -1,0 +1,29 @@
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Install curl for healthcheck
+RUN apk add --no-cache curl
+
+# Copy package files
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/backend/package.json ./apps/backend/
+COPY packages/shared/package.json ./packages/shared/
+COPY packages/config/package.json ./packages/config/
+
+# Install pnpm and dependencies
+RUN npm install -g pnpm
+RUN pnpm install --frozen-lockfile
+
+# Copy source code
+COPY apps/backend ./apps/backend
+COPY packages ./packages
+
+# Build the application
+RUN pnpm --filter @n8n-streamdeck/backend build
+
+# Expose port
+EXPOSE 3001
+
+# Start the application in test mode
+CMD ["pnpm", "--filter", "@n8n-streamdeck/backend", "start:test"]

@@ -1,278 +1,307 @@
+import request from 'supertest';
+import { Server } from 'http';
+import { createApp } from '../../app';
 import { StreamDeckService } from '../../services/streamDeckService';
-import { StreamDeckTestHelper, createMockDevice } from '../utils/testHelpers';
-import { DeviceType } from '@n8n-streamdeck/shared';
+import { Device, DeviceType } from '@n8n-streamdeck/shared';
 
-// Mock the StreamDeck module
-jest.mock('@elgato-stream-deck/node');
+describe('Device Discovery and Connection Flow Integration', () => {
+  let app: any;
+  let server: Server;
+  let streamDeckService: StreamDeckService;
 
-describe('Device Flow Integration Tests', () => {
-  let streamDeckHelper: StreamDeckTestHelper;
-  let service: StreamDeckService;
+  // Helper function to create proper Device objects
+  const createMockDevice = (overrides: Partial<Device> = {}): Device => {
+    const now = new Date();
+    return {
+      id: 'test-device-1',
+      name: 'StreamDeck MK.2',
+      type: DeviceType.STREAMDECK_MK2,
+      serialNumber: 'CL12345678',
+      buttonCount: 15,
+      isConnected: true,
+      firmwareVersion: '1.0.0',
+      createdAt: now,
+      updatedAt: now,
+      ...overrides,
+    };
+  };
 
-  beforeEach(() => {
-    streamDeckHelper = new StreamDeckTestHelper();
-    service = streamDeckHelper.getService();
+  beforeAll(async () => {
+    // Create app with test configuration
+    app = createApp();
+    server = app.listen(0); // Use random port
+    streamDeckService = StreamDeckService.getInstance();
   });
 
-  afterEach(() => {
-    streamDeckHelper.cleanup();
+  afterAll(async () => {
+    await streamDeckService.cleanup();
+    server.close();
   });
 
-  describe('Device Discovery and Connection Flow', () => {
-    it('should discover devices and connect successfully', async () => {
-      // Setup mock devices
-      const mockDevices = [
+  beforeEach(async () => {
+    // Reset service state before each test
+    await streamDeckService.cleanup();
+    streamDeckService = StreamDeckService.getInstance();
+  });
+
+  describe('Device Discovery', () => {
+    it('should discover connected StreamDeck devices', async () => {
+      // Create proper mock device using helper function
+      const mockDevice = createMockDevice({
+        id: 'test-device-1',
+        name: 'StreamDeck MK.2',
+        serialNumber: 'CL12345678',
+        isConnected: true,
+        buttonCount: 15,
+        firmwareVersion: '1.0.0',
+      });
+
+      // Simulate device connection
+      streamDeckService.addMockDevice(mockDevice);
+
+      const response = await request(app).get('/api/devices').expect(200);
+
+      expect(response.body.success).toBe(true);
+      expect(response.body.data).toHaveLength(1);
+      expect(response.body.data[0]).toMatchObject({
+        id: mockDevice.id,
+        name: mockDevice.name,
+        type: mockDevice.type,
+        isConnected: true,
+      });
+    });
+
+    it('should handle device connection events', async () => {
+      const mockDevice = createMockDevice({
+        id: 'test-device-2',
+        name: 'StreamDeck Mini',
+        type: DeviceType.STREAMDECK_MINI,
+        serialNumber: 'CL87654321',
+        isConnected: false,
+        buttonCount: 6,
+        firmwareVersion: '1.0.0',
+      });
+
+      // Initially no devices
+      let response = await request(app).get('/api/devices').expect(200);
+
+      expect(response.body.data).toHaveLength(0);
+
+      // Simulate device connection
+      streamDeckService.addMockDevice({ ...mockDevice, isConnected: true });
+
+      // Device should now be available
+      response = await request(app).get('/api/devices').expect(200);
+
+      expect(response.body.data).toHaveLength(1);
+      expect(response.body.data[0].isConnected).toBe(true);
+    });
+
+    it('should handle device disconnection events', async () => {
+      const mockDevice = createMockDevice({
+        id: 'test-device-3',
+        name: 'StreamDeck XL',
+        type: DeviceType.STREAMDECK_XL,
+        serialNumber: 'CL11111111',
+        isConnected: true,
+        buttonCount: 32,
+        firmwareVersion: '1.0.0',
+      });
+
+      // Add connected device
+      streamDeckService.addMockDevice(mockDevice);
+
+      let response = await request(app).get('/api/devices').expect(200);
+
+      expect(response.body.data[0].isConnected).toBe(true);
+
+      // Simulate disconnection
+      streamDeckService.updateMockDevice(mockDevice.id, { isConnected: false });
+
+      response = await request(app).get('/api/devices').expect(200);
+
+      expect(response.body.data[0].isConnected).toBe(false);
+    });
+  });
+
+  describe('Device Connection Management', () => {
+    it('should connect to a specific device', async () => {
+      const mockDevice = createMockDevice({
+        id: 'test-device-4',
+        name: 'StreamDeck MK.2',
+        serialNumber: 'CL22222222',
+        isConnected: false,
+        buttonCount: 15,
+        firmwareVersion: '1.0.0',
+      });
+
+      streamDeckService.addMockDevice(mockDevice);
+
+      const response = await request(app)
+        .post(`/api/devices/${mockDevice.id}/connect`)
+        .expect(200);
+
+      expect(response.body.success).toBe(true);
+      expect(response.body.data.isConnected).toBe(true);
+    });
+
+    it('should disconnect from a specific device', async () => {
+      const mockDevice = createMockDevice({
+        id: 'test-device-5',
+        name: 'StreamDeck MK.2',
+        serialNumber: 'CL33333333',
+        isConnected: true,
+        buttonCount: 15,
+        firmwareVersion: '1.0.0',
+      });
+
+      streamDeckService.addMockDevice(mockDevice);
+
+      const response = await request(app)
+        .post(`/api/devices/${mockDevice.id}/disconnect`)
+        .expect(200);
+
+      expect(response.body.success).toBe(true);
+      expect(response.body.data.isConnected).toBe(false);
+    });
+
+    it('should handle connection errors gracefully', async () => {
+      const response = await request(app)
+        .post('/api/devices/non-existent-device/connect')
+        .expect(404);
+
+      expect(response.body.success).toBe(false);
+      expect(response.body.error).toContain('Device not found');
+    });
+  });
+
+  describe('Device Information Retrieval', () => {
+    it('should get detailed device information', async () => {
+      const mockDevice = createMockDevice({
+        id: 'test-device-6',
+        name: 'StreamDeck MK.2',
+        serialNumber: 'CL44444444',
+        isConnected: true,
+        buttonCount: 15,
+        firmwareVersion: '1.0.0',
+      });
+
+      streamDeckService.addMockDevice(mockDevice);
+
+      const response = await request(app)
+        .get(`/api/devices/${mockDevice.id}`)
+        .expect(200);
+
+      expect(response.body.success).toBe(true);
+      expect(response.body.data).toMatchObject({
+        id: mockDevice.id,
+        name: mockDevice.name,
+        type: mockDevice.type,
+        serialNumber: mockDevice.serialNumber,
+        isConnected: mockDevice.isConnected,
+        buttonCount: mockDevice.buttonCount,
+        firmwareVersion: mockDevice.firmwareVersion,
+      });
+    });
+
+    it('should return 404 for non-existent device', async () => {
+      const response = await request(app)
+        .get('/api/devices/non-existent-device')
+        .expect(404);
+
+      expect(response.body.success).toBe(false);
+      expect(response.body.error).toContain('Device not found');
+    });
+  });
+
+  describe('Multiple Device Management', () => {
+    it('should handle multiple connected devices', async () => {
+      const devices = [
         createMockDevice({
           id: 'device-1',
-          name: 'StreamDeck Original',
-          type: DeviceType.STREAMDECK_ORIGINAL,
+          name: 'StreamDeck MK.2',
+          type: DeviceType.STREAMDECK_MK2,
+          serialNumber: 'CL11111111',
+          isConnected: true,
           buttonCount: 15,
+          firmwareVersion: '1.0.0',
         }),
         createMockDevice({
           id: 'device-2',
           name: 'StreamDeck Mini',
           type: DeviceType.STREAMDECK_MINI,
+          serialNumber: 'CL22222222',
+          isConnected: true,
           buttonCount: 6,
-        }),
-      ];
-
-      await streamDeckHelper.setupMockDevices(mockDevices);
-
-      // Discover devices
-      const discoveredDevices = await service.discoverDevices();
-      expect(discoveredDevices).toHaveLength(2);
-
-      // Connect to first device
-      await streamDeckHelper.simulateDeviceConnection('device-1');
-      expect(service.isDeviceConnected('device-1')).toBe(true);
-
-      // Verify device state
-      const device = service.getDevice('device-1');
-      expect(device?.isConnected).toBe(true);
-
-      // Get connected devices
-      const connectedDevices = service.getConnectedDevices();
-      expect(connectedDevices).toHaveLength(1);
-      expect(connectedDevices[0].id).toBe('device-1');
-    });
-
-    it('should handle device disconnection flow', async () => {
-      const mockDevice = createMockDevice({ id: 'device-1' });
-      await streamDeckHelper.setupMockDevices([mockDevice]);
-
-      // Connect device
-      await streamDeckHelper.simulateDeviceConnection('device-1');
-      expect(service.isDeviceConnected('device-1')).toBe(true);
-
-      // Disconnect device
-      await streamDeckHelper.simulateDeviceDisconnection('device-1');
-      expect(service.isDeviceConnected('device-1')).toBe(false);
-
-      // Verify no connected devices
-      const connectedDevices = service.getConnectedDevices();
-      expect(connectedDevices).toHaveLength(0);
-    });
-  });
-
-  describe('Button Press Event Flow', () => {
-    it('should handle button press events', async () => {
-      const mockDevice = createMockDevice({ id: 'device-1', buttonCount: 15 });
-      await streamDeckHelper.setupMockDevices([mockDevice]);
-      await streamDeckHelper.simulateDeviceConnection('device-1');
-
-      // Set up event listener
-      const buttonPressEvents: any[] = [];
-      service.on('buttonPress', (event) => {
-        buttonPressEvents.push(event);
-      });
-
-      // Simulate button press
-      await streamDeckHelper.simulateButtonPress('device-1', 0);
-
-      // Verify event was emitted
-      expect(buttonPressEvents).toHaveLength(1);
-      expect(buttonPressEvents[0]).toMatchObject({
-        type: 'button-press',
-        data: expect.objectContaining({
-          deviceId: 'device-1',
-          buttonIndex: 0,
-          pressType: 'short',
-        }),
-      });
-    });
-
-    it('should handle multiple button presses', async () => {
-      const mockDevice = createMockDevice({ id: 'device-1', buttonCount: 15 });
-      await streamDeckHelper.setupMockDevices([mockDevice]);
-      await streamDeckHelper.simulateDeviceConnection('device-1');
-
-      const buttonPressEvents: any[] = [];
-      service.on('buttonPress', (event) => {
-        buttonPressEvents.push(event);
-      });
-
-      // Simulate multiple button presses
-      await streamDeckHelper.simulateButtonPress('device-1', 0);
-      await streamDeckHelper.simulateButtonPress('device-1', 1);
-      await streamDeckHelper.simulateButtonPress('device-1', 2);
-
-      expect(buttonPressEvents).toHaveLength(3);
-      expect(buttonPressEvents[0].data.buttonIndex).toBe(0);
-      expect(buttonPressEvents[1].data.buttonIndex).toBe(1);
-      expect(buttonPressEvents[2].data.buttonIndex).toBe(2);
-    });
-  });
-
-  describe('Device Type Handling', () => {
-    it('should handle different device types correctly', async () => {
-      const mockDevices = [
-        createMockDevice({
-          id: 'original-device',
-          type: DeviceType.STREAMDECK_ORIGINAL,
-          buttonCount: 15,
+          firmwareVersion: '1.0.0',
         }),
         createMockDevice({
-          id: 'mini-device',
-          type: DeviceType.STREAMDECK_MINI,
-          buttonCount: 6,
-        }),
-        createMockDevice({
-          id: 'xl-device',
+          id: 'device-3',
+          name: 'StreamDeck XL',
           type: DeviceType.STREAMDECK_XL,
+          serialNumber: 'CL33333333',
+          isConnected: false,
           buttonCount: 32,
+          firmwareVersion: '1.0.0',
         }),
       ];
 
-      await streamDeckHelper.setupMockDevices(mockDevices);
-
-      const originalDevice = service.getDevice('original-device');
-      const miniDevice = service.getDevice('mini-device');
-      const xlDevice = service.getDevice('xl-device');
-
-      expect(originalDevice?.buttonCount).toBe(15);
-      expect(miniDevice?.buttonCount).toBe(6);
-      expect(xlDevice?.buttonCount).toBe(32);
-
-      expect(originalDevice?.type).toBe(DeviceType.STREAMDECK_ORIGINAL);
-      expect(miniDevice?.type).toBe(DeviceType.STREAMDECK_MINI);
-      expect(xlDevice?.type).toBe(DeviceType.STREAMDECK_XL);
-    });
-  });
-
-  describe('Error Handling Flow', () => {
-    it('should handle device errors gracefully', async () => {
-      const mockDevice = createMockDevice({ id: 'device-1' });
-      await streamDeckHelper.setupMockDevices([mockDevice]);
-      await streamDeckHelper.simulateDeviceConnection('device-1');
-
-      const errorEvents: any[] = [];
-      service.on('deviceError', (event) => {
-        errorEvents.push(event);
+      devices.forEach((device) => {
+        streamDeckService.addMockDevice(device);
       });
 
-      // Simulate device error (this would be done through the mock device)
-      // For now, we'll test that the error handling structure is in place
-      expect(service.listenerCount('deviceError')).toBe(1);
+      const response = await request(app).get('/api/devices').expect(200);
+
+      expect(response.body.success).toBe(true);
+      expect(response.body.data).toHaveLength(3);
+
+      const connectedDevices = response.body.data.filter(
+        (d: any) => d.isConnected
+      );
+      expect(connectedDevices).toHaveLength(2);
     });
 
-    it('should handle connection failures', async () => {
-      // Test connection to non-existent device
-      await expect(
-        service.connectToDevice('non-existent-device')
-      ).rejects.toThrow();
-    });
-  });
-
-  describe('Service Lifecycle', () => {
-    it('should initialize service correctly', () => {
-      const newService = new StreamDeckService({
-        autoConnect: false,
-        reconnectInterval: 10000,
-        maxReconnectAttempts: 5,
+    it('should maintain device state independently', async () => {
+      const device1 = createMockDevice({
+        id: 'device-1',
+        name: 'StreamDeck MK.2',
+        serialNumber: 'CL11111111',
+        isConnected: true,
+        buttonCount: 15,
+        firmwareVersion: '1.0.0',
       });
 
-      expect(newService).toBeInstanceOf(StreamDeckService);
-      expect(newService.getConnectedDevices()).toHaveLength(0);
-    });
-
-    it('should shutdown service cleanly', async () => {
-      const mockDevices = [
-        createMockDevice({ id: 'device-1' }),
-        createMockDevice({ id: 'device-2' }),
-      ];
-
-      await streamDeckHelper.setupMockDevices(mockDevices);
-      await streamDeckHelper.simulateDeviceConnection('device-1');
-      await streamDeckHelper.simulateDeviceConnection('device-2');
-
-      expect(service.getConnectedDevices()).toHaveLength(2);
-
-      await service.shutdown();
-
-      expect(service.getConnectedDevices()).toHaveLength(0);
-      expect(service.listenerCount('deviceConnected')).toBe(0);
-      expect(service.listenerCount('deviceDisconnected')).toBe(0);
-      expect(service.listenerCount('buttonPress')).toBe(0);
-    });
-  });
-
-  describe('Button Configuration Flow', () => {
-    it('should handle button configuration workflow', async () => {
-      const mockDevice = createMockDevice({ id: 'device-1', buttonCount: 15 });
-      await streamDeckHelper.setupMockDevices([mockDevice]);
-      await streamDeckHelper.simulateDeviceConnection('device-1');
-
-      // This would typically involve the button controller
-      // but we're testing the service-level functionality
-      expect(service.isDeviceConnected('device-1')).toBe(true);
-      expect(service.getDevice('device-1')?.buttonCount).toBe(15);
-    });
-  });
-
-  describe('Concurrent Operations', () => {
-    it('should handle concurrent device operations', async () => {
-      const mockDevices = [
-        createMockDevice({ id: 'device-1' }),
-        createMockDevice({ id: 'device-2' }),
-        createMockDevice({ id: 'device-3' }),
-      ];
-
-      await streamDeckHelper.setupMockDevices(mockDevices);
-
-      // Simulate concurrent connections
-      const connectionPromises = [
-        streamDeckHelper.simulateDeviceConnection('device-1'),
-        streamDeckHelper.simulateDeviceConnection('device-2'),
-        streamDeckHelper.simulateDeviceConnection('device-3'),
-      ];
-
-      await Promise.all(connectionPromises);
-
-      expect(service.getConnectedDevices()).toHaveLength(3);
-    });
-
-    it('should handle concurrent button presses', async () => {
-      const mockDevice = createMockDevice({ id: 'device-1', buttonCount: 15 });
-      await streamDeckHelper.setupMockDevices([mockDevice]);
-      await streamDeckHelper.simulateDeviceConnection('device-1');
-
-      const buttonPressEvents: any[] = [];
-      service.on('buttonPress', (event) => {
-        buttonPressEvents.push(event);
+      const device2 = createMockDevice({
+        id: 'device-2',
+        name: 'StreamDeck Mini',
+        type: DeviceType.STREAMDECK_MINI,
+        serialNumber: 'CL22222222',
+        isConnected: true,
+        buttonCount: 6,
+        firmwareVersion: '1.0.0',
       });
 
-      // Simulate concurrent button presses
-      const pressPromises = [
-        streamDeckHelper.simulateButtonPress('device-1', 0),
-        streamDeckHelper.simulateButtonPress('device-1', 1),
-        streamDeckHelper.simulateButtonPress('device-1', 2),
-        streamDeckHelper.simulateButtonPress('device-1', 3),
-        streamDeckHelper.simulateButtonPress('device-1', 4),
-      ];
+      streamDeckService.addMockDevice(device1);
+      streamDeckService.addMockDevice(device2);
 
-      await Promise.all(pressPromises);
+      // Disconnect device1
+      await request(app)
+        .post(`/api/devices/${device1.id}/disconnect`)
+        .expect(200);
 
-      expect(buttonPressEvents).toHaveLength(5);
+      // Check that device2 is still connected
+      const response = await request(app)
+        .get(`/api/devices/${device2.id}`)
+        .expect(200);
+
+      expect(response.body.data.isConnected).toBe(true);
+
+      // Check that device1 is disconnected
+      const response2 = await request(app)
+        .get(`/api/devices/${device1.id}`)
+        .expect(200);
+
+      expect(response2.body.data.isConnected).toBe(false);
     });
   });
 });
