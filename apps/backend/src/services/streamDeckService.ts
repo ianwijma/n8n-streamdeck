@@ -14,16 +14,18 @@ import {
   DeviceDisconnectedEvent,
   DeviceErrorEvent,
   Logger,
-  generateUUID,
   createEvent,
   EventType,
 } from '@n8n-streamdeck/shared';
 import { config } from '../config/environment';
+import { cacheService, CachedAsync } from './cacheService';
 
 export interface StreamDeckServiceOptions {
   autoConnect?: boolean;
   reconnectInterval?: number;
   maxReconnectAttempts?: number;
+  maxConnections?: number;
+  connectionTimeout?: number;
 }
 
 export class StreamDeckService extends EventEmitter {
