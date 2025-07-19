@@ -16,11 +16,6 @@ const config: StorybookConfig = {
     getAbsolutePath('@storybook/addon-onboarding'),
     '@storybook/addon-controls',
     '@storybook/addon-actions',
-    '@storybook/addon-viewport',
-    '@storybook/addon-backgrounds',
-    '@storybook/addon-toolbars',
-    '@storybook/addon-measure',
-    '@storybook/addon-outline',
   ],
   framework: {
     name: getAbsolutePath('@storybook/nextjs'),
