@@ -1,0 +1,37 @@
+{
+  "name": "@n8n-streamdeck/n8n-node",
+  "version": "1.0.0",
+  "description": "Custom N8N node for StreamDeck integration",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc && npm run copy:icons",
+    "copy:icons": "copyfiles -u 1 \"src/**/*.{png,svg}\" dist/",
+    "dev": "tsc --watch",
+    "test": "jest",
+    "lint": "eslint src --ext .ts",
+    "lint:fix": "eslint src --ext .ts --fix",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "n8n": {
+    "n8nNodesApiVersion": 1,
+    "credentials": [],
+    "nodes": [
+      "dist/nodes/StreamDeck/StreamDeck.node.js"
+    ]
+  },
+  "dependencies": {
+    "n8n-workflow": "^1.32.0",
+    "n8n-core": "^1.32.0",
+    "@n8n-streamdeck/shared": "workspace:*",
+    "@n8n-streamdeck/config": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.16",
+    "typescript": "^5.3.3",
+    "copyfiles": "^2.4.1",
+    "jest": "^29.7.0",
+    "@types/jest": "^29.5.12",
+    "ts-jest": "^29.1.2"
+  }
+}
