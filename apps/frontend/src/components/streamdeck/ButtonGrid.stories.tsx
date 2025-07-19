@@ -33,8 +33,8 @@ const meta: Meta<typeof ButtonGrid> = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-// Empty grid (no buttons configured)
-export const Empty: Story = {
+// Default grid with some buttons configured
+export const Default: Story = {
   args: {
     device: mockDevice,
     onButtonClick: (button, position) =>
@@ -44,7 +44,7 @@ export const Empty: Story = {
     docs: {
       description: {
         story:
-          'An empty button grid showing placeholder slots for all button positions.',
+          'A button grid showing the default state with some configured buttons and empty slots.',
       },
     },
   },
