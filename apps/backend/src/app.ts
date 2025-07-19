@@ -1,4 +1,6 @@
 import express, { Application } from 'express';
+import cookieParser from 'cookie-parser';
+import helmet from 'helmet';
 import { Logger } from '@n8n-streamdeck/shared';
 import { config, validateConfig } from './config/environment';
 
@@ -17,6 +19,7 @@ import devicesRoutes from './routes/devices';
 import buttonsRoutes from './routes/buttons';
 import deviceButtonsRoutes from './routes/deviceButtons';
 import configRoutes from './routes/config';
+import { authRouter, authMiddleware } from './routes/auth';
 
 const logger = new Logger({ level: config.logLevel }, 'App');
 
@@ -39,20 +42,28 @@ export const createApp = (): Application => {
   // Trust proxy (for proper IP addresses behind reverse proxies)
   app.set('trust proxy', true);
 
-  // Security headers
-  app.use((req, res, next) => {
-    res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.setHeader('X-Frame-Options', 'DENY');
-    res.setHeader('X-XSS-Protection', '1; mode=block');
-    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-    next();
-  });
+  // Security middleware
+  app.use(
+    helmet({
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: ["'self'"],
+          styleSrc: ["'self'", "'unsafe-inline'"],
+          scriptSrc: ["'self'"],
+          imgSrc: ["'self'", 'data:', 'https:'],
+        },
+      },
+    })
+  );
 
   // Request ID middleware (must be first)
   app.use(requestIdMiddleware);
 
   // CORS middleware
   app.use(corsMiddleware);
+
+  // Cookie parser middleware
+  app.use(cookieParser());
 
   // Body parsing middleware
   app.use(express.json({ limit: '10mb' }));
@@ -65,15 +76,38 @@ export const createApp = (): Application => {
   app.use('/health', healthRoutes);
   app.use('/api/health', healthRoutes);
 
-  // API routes
-  app.use('/api/devices', devicesRoutes);
-  app.use('/api/buttons', buttonsRoutes);
-  app.use('/api/config', configRoutes);
+  // Authentication routes (before protected routes)
+  app.use('/api/auth', authRouter);
+
+  // Protected API routes (require authentication after setup)
+  app.use(
+    '/api/devices',
+    authMiddleware.checkSetup,
+    authMiddleware.optional,
+    devicesRoutes
+  );
+  app.use(
+    '/api/buttons',
+    authMiddleware.checkSetup,
+    authMiddleware.authenticate,
+    buttonsRoutes
+  );
+  app.use(
+    '/api/config',
+    authMiddleware.checkSetup,
+    authMiddleware.authenticate,
+    configRoutes
+  );
 
   // Device-specific button routes (proper REST structure)
-  app.use('/api/devices/:deviceId/buttons', deviceButtonsRoutes);
+  app.use(
+    '/api/devices/:deviceId/buttons',
+    authMiddleware.checkSetup,
+    authMiddleware.authenticate,
+    deviceButtonsRoutes
+  );
   // Root endpoint
-  app.get('/', (req, res) => {
+  app.get('/', (_req, res) => {
     res.json({
       name: '@n8n-streamdeck/backend',
       version: process.env.npm_package_version || '1.0.0',
@@ -83,6 +117,7 @@ export const createApp = (): Application => {
       endpoints: {
         health: '/health',
         api: {
+          auth: '/api/auth',
           devices: '/api/devices',
           buttons: '/api/buttons',
           config: '/api/config',
