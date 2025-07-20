@@ -7,11 +7,27 @@ import {
   Logger,
   Device,
   DeviceStatus,
+  getDeviceLayout,
 } from '@n8n-streamdeck/shared';
 import { StreamDeckService } from '../services/streamDeckService';
 import { config } from '../config/environment';
 
 const logger = new Logger({ level: config.logLevel }, 'DeviceController');
+
+/**
+ * Transform device data to include layout information for frontend
+ */
+function transformDeviceForApi(device: Device) {
+  const layout = getDeviceLayout(device.type);
+  return {
+    ...device,
+    connected: device.isConnected,
+    columns: layout.columns,
+    rows: layout.rows,
+    createdAt: device.createdAt.toISOString(),
+    updatedAt: device.updatedAt.toISOString(),
+  };
+}
 
 export class DeviceController {
   private streamDeckService: StreamDeckService;
@@ -47,12 +63,7 @@ export class DeviceController {
       ) as Device[];
 
       // Transform devices to match frontend API expectations
-      const transformedDevices = devices.map((device) => ({
-        ...device,
-        connected: device.isConnected, // Map isConnected to connected for frontend
-        createdAt: device.createdAt.toISOString(),
-        updatedAt: device.updatedAt.toISOString(),
-      }));
+      const transformedDevices = devices.map(transformDeviceForApi);
 
       // Filter disconnected devices if requested
       let filteredDevices = transformedDevices;
@@ -146,12 +157,7 @@ export class DeviceController {
       }
 
       // Transform device to match frontend API expectations
-      const transformedDevice = {
-        ...device,
-        connected: device.isConnected,
-        createdAt: device.createdAt.toISOString(),
-        updatedAt: device.updatedAt.toISOString(),
-      };
+      const transformedDevice = transformDeviceForApi(device);
 
       const response = createSuccessResponse(
         transformedDevice,
@@ -168,8 +174,8 @@ export class DeviceController {
 
       const errorResponse = createErrorResponse(
         {
-          code: ApiErrorCode.INTERNAL_ERROR,
-          message: 'Failed to retrieve device',
+          code: ApiErrorCode.DEVICE_NOT_CONNECTED,
+          message: 'Failed to connect to device',
           details: { error: (error as Error).message },
         },
         req.requestId
@@ -238,12 +244,7 @@ export class DeviceController {
 
       // Transform device to match frontend API expectations
       const transformedDevice = updatedDevice
-        ? {
-            ...updatedDevice,
-            connected: updatedDevice.isConnected,
-            createdAt: updatedDevice.createdAt.toISOString(),
-            updatedAt: updatedDevice.updatedAt.toISOString(),
-          }
+        ? transformDeviceForApi(updatedDevice)
         : null;
 
       const response = createSuccessResponse(
@@ -331,12 +332,7 @@ export class DeviceController {
 
       // Transform device to match frontend API expectations
       const transformedDevice = updatedDevice
-        ? {
-            ...updatedDevice,
-            connected: updatedDevice.isConnected,
-            createdAt: updatedDevice.createdAt.toISOString(),
-            updatedAt: updatedDevice.updatedAt.toISOString(),
-          }
+        ? transformDeviceForApi(updatedDevice)
         : null;
 
       const response = createSuccessResponse(
