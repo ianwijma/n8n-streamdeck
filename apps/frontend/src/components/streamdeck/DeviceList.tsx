@@ -64,20 +64,59 @@ export default function DeviceList({
   }
 
   if (error) {
+    // For testing purposes, show mock device when API fails
+    const mockDevices = [
+      {
+        id: 'streamdeck-test-123',
+        name: 'StreamDeck XL (Mock)',
+        model: 'StreamDeck XL',
+        serialNumber: 'TEST123',
+        firmwareVersion: '1.0.0',
+        buttonCount: 32,
+        columns: 8,
+        rows: 4,
+        connected: true,
+        lastSeen: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+    ];
+
     return (
-      <div className={`${className}`}>
-        <div className="flex items-center justify-between mb-4">
+      <div className={`space-y-6 ${className}`}>
+        <div className="flex items-center justify-between">
           <h2 className="text-xl font-semibold text-gray-900">
             StreamDeck Devices
           </h2>
-          <button
-            onClick={() => refetch()}
-            className="px-4 py-2 text-sm font-medium text-indigo-600 bg-indigo-50 rounded-md hover:bg-indigo-100 transition-colors"
-          >
-            Retry
-          </button>
+          <div className="flex items-center space-x-4">
+            <div className="text-sm text-orange-600">
+              API Error - Showing Mock Data
+            </div>
+            <button
+              onClick={() => refetch()}
+              className="px-4 py-2 text-sm font-medium text-indigo-600 bg-indigo-50 rounded-md hover:bg-indigo-100 transition-colors"
+            >
+              Retry
+            </button>
+          </div>
         </div>
-        <div className="bg-red-50 border border-red-200 rounded-lg p-6">
+
+        <div>
+          <h3 className="text-lg font-medium text-gray-900 mb-4">
+            Mock Devices (for testing routing)
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {mockDevices.map((device) => (
+              <DeviceCard
+                key={device.id}
+                device={device}
+                onClick={onDeviceSelect}
+              />
+            ))}
+          </div>
+        </div>
+
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
           <div className="flex items-center">
             <svg
               className="w-5 h-5 text-red-400 mr-3"
@@ -94,12 +133,13 @@ export default function DeviceList({
             </svg>
             <div>
               <h3 className="text-sm font-medium text-red-800">
-                Failed to load devices
+                API Connection Failed
               </h3>
               <p className="text-sm text-red-700 mt-1">
                 {error instanceof Error
                   ? error.message
                   : 'An unexpected error occurred'}
+                . Using mock data for testing.
               </p>
             </div>
           </div>

@@ -71,8 +71,9 @@ const DeviceCard = React.memo<DeviceCardProps>(
 
     return (
       <div
-        className={`bg-white rounded-lg shadow-md border border-gray-200 p-6 hover:shadow-lg transition-shadow cursor-pointer ${className}`}
+        className={`bg-white rounded-lg shadow-md border border-gray-200 p-6 hover:shadow-lg hover:border-indigo-300 transition-all cursor-pointer ${className}`}
         onClick={handleCardClick}
+        title="Click to configure this device"
       >
         <div className="flex items-start justify-between mb-4">
           <div className="flex items-center space-x-3">
@@ -149,19 +150,22 @@ const DeviceCard = React.memo<DeviceCardProps>(
             <span className="text-sm text-gray-500">
               Status: {device.connected ? 'Online' : 'Offline'}
             </span>
-            <svg
-              className="w-4 h-4 text-gray-400"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M9 5l7 7-7 7"
-              />
-            </svg>
+            <div className="flex items-center text-sm text-indigo-600">
+              <span className="mr-1">Configure</span>
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M9 5l7 7-7 7"
+                />
+              </svg>
+            </div>
           </div>
         </div>
       </div>
