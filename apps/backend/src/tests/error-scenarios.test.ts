@@ -411,7 +411,6 @@ describe('Error Handling Scenarios', () => {
   });
 });
 
-});
 
 describe('Error Handler Integration Tests', () => {
   test('should handle custom application errors', () => {
@@ -716,7 +715,6 @@ describe('Recovery and Resilience Scenarios', () => {
       // Small delay between requests
       await new Promise(resolve => setTimeout(resolve, 100));
     }
-  });
   });
 
   it('should maintain service availability during high load', async () => {
