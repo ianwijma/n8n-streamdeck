@@ -1,0 +1,19 @@
+{
+  "ignore_dirs": [
+    "node_modules",
+    ".next",
+    "dist",
+    "build",
+    "coverage",
+    ".nyc_output",
+    "tmp",
+    "temp",
+    ".cache",
+    "test-results",
+    "e2e",
+    ".storybook-out",
+    "storybook-static",
+    ".git"
+  ],
+  "settle": 20
+}

@@ -6,7 +6,7 @@
   "scripts": {
     "build": "NEXT_PRIVATE_SKIP_STATIC_GENERATION=1 next build",
     "build:docker": "NODE_ENV=production NEXT_PRIVATE_SKIP_STATIC_GENERATION=1 next build",
-    "dev": "next dev",
+    "dev": "WATCHPACK_POLLING=true next dev",
     "start": "next start",
     "test": "jest",
     "test:watch": "jest --watch",

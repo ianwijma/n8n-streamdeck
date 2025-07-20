@@ -43,12 +43,15 @@ const nextConfig = {
 
   // Bundle optimization
   webpack: (config, { dev, isServer }) => {
-    // Exclude unnecessary directories from file watching in development
+    // Restrict file watching to only necessary directories in development
     if (dev) {
       config.watchOptions = {
+        // Use polling to avoid file watcher limits
+        poll: 1000,
+        aggregateTimeout: 300,
+        // Ignore everything by default, then include only what we need
         ignored: [
           '**/node_modules/**',
-          '**/.git/**',
           '**/.next/**',
           '**/dist/**',
           '**/build/**',
@@ -68,9 +71,22 @@ const nextConfig = {
           '**/*.tsbuildinfo',
           '**/.DS_Store',
           '**/Thumbs.db',
+          '**/.git/**',
+          // Ignore parent directories to prevent watching outside project
+          '../**',
+          '../../**',
+          '../../../**',
         ],
-        aggregateTimeout: 300,
-        poll: 1000,
+      };
+
+      // Explicitly set the context to limit watching scope
+      config.context = process.cwd();
+
+      // Add resolve restrictions to prevent watching outside project
+      config.resolve = {
+        ...config.resolve,
+        symlinks: false,
+        modules: ['node_modules', './node_modules', '../../node_modules'],
       };
     }
 
