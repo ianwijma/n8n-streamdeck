@@ -411,6 +411,8 @@ describe('Error Handling Scenarios', () => {
   });
 });
 
+});
+
 describe('Error Handler Integration Tests', () => {
   test('should handle custom application errors', () => {
     const error = new DeviceNotFoundError('test-device');

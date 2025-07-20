@@ -155,16 +155,16 @@ export const listStreamDecks = jest
 
 export const openStreamDeck = jest
   .fn<(path: string) => Promise<MockStreamDeck>>()
-  .mockImplementation((path: string) => {
+  .mockImplementation(async (path: string) => {
     const deviceInfo = mockDevices.find((d) => d.path === path);
     if (!deviceInfo) {
       throw new Error(`Device not found at path: ${path}`);
     }
 
     const device = new MockStreamDeck(deviceInfo);
-    // Auto-open the device
-    setTimeout(() => device.open(), 0);
-    return Promise.resolve(device);
+    // Open the device immediately
+    await device.open();
+    return device;
   });
 
 // Export mock device info for tests

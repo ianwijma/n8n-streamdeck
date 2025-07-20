@@ -12,6 +12,7 @@ const customJestConfig = {
     '^@n8n-streamdeck/config$': '<rootDir>/../../packages/config/src',
   },
   testEnvironment: 'jest-environment-jsdom',
+  testPathIgnorePatterns: ['<rootDir>/e2e/'],
 };
 
 module.exports = createJestConfig(customJestConfig);

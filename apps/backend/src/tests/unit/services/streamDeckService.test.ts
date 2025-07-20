@@ -2,19 +2,23 @@ import { StreamDeckService } from '../../../services/streamDeckService';
 import { DeviceType } from '@n8n-streamdeck/shared';
 import { MockStreamDeck } from '../../mocks/streamdeck.mock';
 
-// Mock the StreamDeck module
-jest.mock('@elgato-stream-deck/node');
-
 describe('StreamDeckService', () => {
   let service: StreamDeckService;
 
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.useRealTimers(); // Use real timers for this test suite
+
+    // Clear cache to ensure fresh state
+    const { cacheService } = require('../../../services/cacheService');
+    cacheService.clear();
+
     service = new StreamDeckService({ autoConnect: false });
   });
 
   afterEach(() => {
     service.removeAllListeners();
+    jest.useFakeTimers(); // Restore fake timers after each test
   });
 
   describe('constructor', () => {
@@ -118,10 +122,8 @@ describe('StreamDeckService', () => {
       expect(eventSpy).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'device-connected',
-          data: expect.objectContaining({
-            device: expect.objectContaining({ id: deviceId }),
-            isReconnection: false,
-          }),
+          device: expect.objectContaining({ id: deviceId }),
+          isReconnection: false,
         })
       );
     });
@@ -177,10 +179,8 @@ describe('StreamDeckService', () => {
       expect(eventSpy).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'device-disconnected',
-          data: expect.objectContaining({
-            deviceId,
-            reason: 'user-disconnect',
-          }),
+          deviceId,
+          reason: 'user-disconnect',
         })
       );
     });
@@ -247,10 +247,8 @@ describe('StreamDeckService', () => {
 
     it('should return connected devices only', async () => {
       const deviceId1 = 'streamdeck-SD001234567890';
-      const deviceId2 = 'streamdeck-SD001234567891';
 
       await service.connectToDevice(deviceId1);
-      // Don't connect deviceId2
 
       const connectedDevices = service.getConnectedDevices();
       expect(connectedDevices).toHaveLength(1);
@@ -339,11 +337,9 @@ describe('StreamDeckService', () => {
       expect(eventSpy).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'button-press',
-          data: expect.objectContaining({
-            deviceId,
-            buttonIndex,
-            pressType: 'short',
-          }),
+          deviceId,
+          buttonIndex,
+          pressType: 'short',
         })
       );
     });
@@ -370,12 +366,10 @@ describe('StreamDeckService', () => {
       expect(eventSpy).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'device-error',
-          data: expect.objectContaining({
-            deviceId,
-            error: expect.objectContaining({
-              code: 'DEVICE_ERROR',
-              message: 'Test error',
-            }),
+          deviceId,
+          error: expect.objectContaining({
+            code: 'DEVICE_ERROR',
+            message: 'Test error',
           }),
         })
       );

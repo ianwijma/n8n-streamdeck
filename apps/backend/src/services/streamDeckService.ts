@@ -67,6 +67,10 @@ export class StreamDeckService extends EventEmitter {
     const cached = cacheService.get<Device[]>('discover-devices');
     if (cached) {
       this.logger.debug('Returning cached device discovery results');
+      // Ensure deviceInfo map is populated from cache
+      for (const device of cached) {
+        this.deviceInfo.set(device.id, device);
+      }
       return cached;
     }
     try {

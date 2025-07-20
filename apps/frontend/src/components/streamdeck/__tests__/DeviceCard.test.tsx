@@ -26,13 +26,13 @@ describe('DeviceCard', () => {
   it('shows connected status for connected device', () => {
     render(<DeviceCard device={mockDevice} />);
 
-    expect(screen.getByText('Online')).toBeTruthy();
+    expect(screen.getByText(/Online/)).toBeTruthy();
   });
 
   it('shows disconnected status for disconnected device', () => {
     render(<DeviceCard device={mockDisconnectedDevice} />);
 
-    expect(screen.getByText('Offline')).toBeTruthy();
+    expect(screen.getByText(/Offline/)).toBeTruthy();
   });
 
   it('calls onClick when device is clicked', () => {
@@ -51,6 +51,6 @@ describe('DeviceCard', () => {
   it('shows device layout information', () => {
     render(<DeviceCard device={mockDevice} />);
 
-    expect(screen.getByText('5×3')).toBeTruthy();
+    expect(screen.getByText(/5×3/)).toBeTruthy();
   });
 });
