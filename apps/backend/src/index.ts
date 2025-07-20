@@ -9,6 +9,7 @@ import { databaseService } from './services/databaseService';
 const logger = new Logger({ level: config.logLevel }, 'Server');
 
 let server: Server;
+let isShuttingDown = false;
 
 const startServer = async (): Promise<void> => {
   try {
@@ -102,7 +103,9 @@ const startServer = async (): Promise<void> => {
 
     // Handle server close
     server.on('close', () => {
-      logger.info('Server closed');
+      if (!isShuttingDown) {
+        logger.info('Server closed unexpectedly');
+      }
     });
   } catch (error) {
     logger.error('Failed to start server', error as Error);
@@ -111,6 +114,13 @@ const startServer = async (): Promise<void> => {
 };
 
 const gracefulShutdown = async (signal: string): Promise<void> => {
+  // Prevent multiple shutdown attempts
+  if (isShuttingDown) {
+    logger.info(`Shutdown already in progress, ignoring ${signal}`);
+    return;
+  }
+
+  isShuttingDown = true;
   logger.info(`Received ${signal}, starting graceful shutdown`);
 
   try {
@@ -125,25 +135,36 @@ const gracefulShutdown = async (signal: string): Promise<void> => {
     // Shutdown database connection
     await databaseService.cleanup();
 
-    if (server) {
-      server.close((error) => {
-        if (error) {
-          logger.error('Error during server shutdown', error);
-          process.exit(1);
-        }
+    // Close server if it exists and is still listening
+    if (server && server.listening) {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => {
+          if (error) {
+            // Check if it's the expected "server not running" error
+            if ((error as any).code === 'ERR_SERVER_NOT_RUNNING') {
+              logger.info('Server was already closed');
+              resolve();
+            } else {
+              logger.error('Error during server shutdown', error);
+              reject(error);
+            }
+          } else {
+            logger.info('Server shutdown completed');
+            resolve();
+          }
+        });
 
-        logger.info('Server shutdown completed');
-        process.exit(0);
+        // Force shutdown after 10 seconds
+        setTimeout(() => {
+          logger.warn('Forcing server shutdown after timeout');
+          reject(new Error('Server shutdown timeout'));
+        }, 10000);
       });
-
-      // Force shutdown after 10 seconds
-      setTimeout(() => {
-        logger.warn('Forcing server shutdown after timeout');
-        process.exit(1);
-      }, 10000);
     } else {
-      process.exit(0);
+      logger.info('Server was not running or already closed');
     }
+
+    process.exit(0);
   } catch (error) {
     logger.error('Error during graceful shutdown', error as Error);
     process.exit(1);
