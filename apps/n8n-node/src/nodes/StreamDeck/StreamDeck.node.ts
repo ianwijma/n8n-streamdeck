@@ -5,7 +5,6 @@ import {
   INodeTypeDescription,
   NodeConnectionType,
 } from 'n8n-workflow';
-import { createStreamDeckAction } from '@n8n-streamdeck/shared';
 
 export class StreamDeck implements INodeType {
   description: INodeTypeDescription = {
@@ -48,7 +47,13 @@ export class StreamDeck implements INodeType {
       const actionId = this.getNodeParameter('actionId', i) as string;
       const actionTitle = this.getNodeParameter('actionTitle', i) as string;
 
-      const action = createStreamDeckAction(actionId, actionTitle);
+      // Simple action object (temporary - will be enhanced later)
+      const action = {
+        id: actionId,
+        title: actionTitle,
+        type: 'streamdeck-action',
+        createdAt: new Date().toISOString(),
+      };
 
       returnData.push({
         json: {
