@@ -22,9 +22,6 @@ interface ButtonConfigForm {
   textColor?: string;
   fontSize?: number;
   enabled: boolean;
-  n8nWorkflowId?: string;
-  n8nWebhookUrl?: string;
-  n8nPayload?: string;
 }
 
 interface ButtonEditorPageProps {
@@ -64,22 +61,6 @@ export default function ButtonEditorPage({
       textColor: button?.textColor || '#ffffff',
       fontSize: button?.fontSize || 12,
       enabled: button?.enabled ?? true,
-      n8nWorkflowId:
-        button?.action?.type === 'n8n-workflow'
-          ? (button.action.config as any)?.workflowId || ''
-          : '',
-      n8nWebhookUrl:
-        button?.action?.type === 'n8n-workflow'
-          ? (button.action.config as any)?.webhookUrl || ''
-          : '',
-      n8nPayload:
-        button?.action?.type === 'n8n-workflow'
-          ? JSON.stringify(
-              (button.action.config as any)?.payload || {},
-              null,
-              2
-            )
-          : '{}',
     },
   });
 
@@ -98,17 +79,7 @@ export default function ButtonEditorPage({
   const buildActionConfig = (
     data: ButtonConfigForm
   ): ButtonActionResponse | undefined => {
-    // Always create an N8N workflow action if workflow ID is provided
-    if (data.n8nWorkflowId) {
-      return {
-        type: 'n8n-workflow',
-        config: {
-          workflowId: data.n8nWorkflowId,
-          webhookUrl: data.n8nWebhookUrl || '',
-          payload: data.n8nPayload ? JSON.parse(data.n8nPayload) : {},
-        },
-      };
-    }
+    // No action configuration needed - button presses are handled by the backend
     return undefined;
   };
 
@@ -272,102 +243,48 @@ export default function ButtonEditorPage({
           </div>
         </div>
 
-        {/* N8N Workflow Configuration */}
+        {/* N8N Integration Info */}
         <div className="bg-white shadow rounded-lg p-6">
           <h3 className="text-lg font-medium text-gray-900 mb-6">
-            N8N Workflow
+            N8N Integration
           </h3>
-          <div className="space-y-6">
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <div className="flex items-start">
-                <div className="flex-shrink-0">
-                  <svg
-                    className="h-5 w-5 text-blue-400"
-                    viewBox="0 0 20 20"
-                    fill="currentColor"
-                  >
-                    <path
-                      fillRule="evenodd"
-                      d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
-                </div>
-                <div className="ml-3">
-                  <h4 className="text-sm font-medium text-blue-800">
-                    StreamDeck Button → N8N Workflow
-                  </h4>
-                  <p className="text-sm text-blue-700 mt-1">
-                    Configure this button to trigger an N8N workflow when
-                    pressed. You'll need the workflow ID and webhook URL from
-                    your N8N instance.
+          <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+            <div className="flex items-start">
+              <div className="flex-shrink-0">
+                <svg
+                  className="h-5 w-5 text-green-400"
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
+                >
+                  <path
+                    fillRule="evenodd"
+                    d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+              </div>
+              <div className="ml-3">
+                <h4 className="text-sm font-medium text-green-800">
+                  Ready for N8N Workflows
+                </h4>
+                <p className="text-sm text-green-700 mt-1">
+                  This button is ready to trigger N8N workflows. Configure which
+                  workflows should respond to this button press from within your
+                  N8N instance using the StreamDeck node.
+                </p>
+                <div className="mt-3">
+                  <p className="text-xs text-green-600 font-medium">
+                    Button Details:
                   </p>
+                  <ul className="text-xs text-green-600 mt-1 space-y-1">
+                    <li>• Device ID: {deviceId}</li>
+                    <li>• Button Position: {position + 1}</li>
+                    <li>
+                      • Button ID: {button?.id || 'Will be generated on save'}
+                    </li>
+                  </ul>
                 </div>
               </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Workflow ID <span className="text-red-500">*</span>
-              </label>
-              <input
-                {...register('n8nWorkflowId', {
-                  required: 'Workflow ID is required',
-                })}
-                type="text"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                placeholder="e.g., 123 or my-workflow-name"
-              />
-              {errors.n8nWorkflowId && (
-                <p className="text-sm text-red-600 mt-1">
-                  {errors.n8nWorkflowId.message}
-                </p>
-              )}
-              <p className="text-xs text-gray-500 mt-1">
-                The unique identifier for your N8N workflow
-              </p>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Webhook URL <span className="text-red-500">*</span>
-              </label>
-              <input
-                {...register('n8nWebhookUrl', {
-                  required: 'Webhook URL is required',
-                  pattern: {
-                    value: /^https?:\/\/.+/,
-                    message: 'Please enter a valid URL',
-                  },
-                })}
-                type="url"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                placeholder="https://your-n8n-instance.com/webhook/streamdeck-trigger"
-              />
-              {errors.n8nWebhookUrl && (
-                <p className="text-sm text-red-600 mt-1">
-                  {errors.n8nWebhookUrl.message}
-                </p>
-              )}
-              <p className="text-xs text-gray-500 mt-1">
-                The webhook URL that will trigger your N8N workflow
-              </p>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Payload (JSON)
-              </label>
-              <textarea
-                {...register('n8nPayload')}
-                rows={4}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-sm"
-                placeholder='{"deviceId": "streamdeck-001", "buttonPosition": 1, "timestamp": "2024-01-01T00:00:00Z"}'
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                Optional JSON payload to send with the webhook request. Leave
-                empty for default payload.
-              </p>
             </div>
           </div>
         </div>

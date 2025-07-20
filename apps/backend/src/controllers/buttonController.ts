@@ -11,6 +11,7 @@ import {
   generateUUID,
 } from '@n8n-streamdeck/shared';
 import { StreamDeckService } from '../services/streamDeckService';
+import { WebhookService } from '../services/webhookService';
 import { config } from '../config/environment';
 
 const logger = new Logger({ level: config.logLevel }, 'ButtonController');
@@ -21,9 +22,11 @@ const buttonStorage = new Map<string, Button[]>();
 
 export class ButtonController {
   private streamDeckService: StreamDeckService;
+  private webhookService: WebhookService;
 
   constructor(streamDeckService: StreamDeckService) {
     this.streamDeckService = streamDeckService;
+    this.webhookService = WebhookService.getInstance();
   }
 
   /**
@@ -546,6 +549,42 @@ export class ButtonController {
         res.status(HttpStatusCode.BAD_REQUEST).json(errorResponse);
         return;
       }
+
+      // Send webhook event for button press
+      const buttonPressEvent = {
+        event: 'pressed' as const,
+        deviceId,
+        buttonId: button.id,
+        position: button.index,
+        timestamp: new Date().toISOString(),
+        button: {
+          id: button.id,
+          deviceId: button.deviceId,
+          position: button.index,
+          title: button.label,
+          enabled: button.isEnabled,
+          backgroundColor: button.backgroundColor,
+          textColor: button.textColor,
+          fontSize: button.fontSize,
+        },
+        device: {
+          id: device.id,
+          name: device.name,
+          model: device.type,
+          connected: device.isConnected,
+          buttonCount: device.buttonCount,
+        },
+      };
+
+      // Send to webhooks (don't wait for completion)
+      this.webhookService
+        .sendButtonPressEvent(buttonPressEvent)
+        .catch((error) => {
+          logger.error('Failed to send webhook events', error as Error, {
+            deviceId,
+            buttonId: button.id,
+          });
+        });
 
       // Execute button action
       const result = await this.executeButtonAction(button);

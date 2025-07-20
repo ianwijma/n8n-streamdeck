@@ -106,8 +106,9 @@ export default function ButtonConfigurationPage() {
             Configure Button {position + 1}
           </h1>
           <p className="text-gray-600 mt-2">
-            Configure button {position + 1} on {device.name} to trigger an N8N
-            workflow
+            Configure the appearance of button {position + 1} on {device.name}.
+            N8N workflows are configured from within N8N using the StreamDeck
+            node.
           </p>
         </div>
 

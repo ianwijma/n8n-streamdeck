@@ -22,6 +22,7 @@ import buttonsRoutes from './routes/buttons';
 import deviceButtonsRoutes from './routes/deviceButtons';
 import configRoutes from './routes/config';
 import errorsRoutes from './routes/errors';
+import webhooksRoutes from './routes/webhooks';
 import { authRouter, authMiddleware } from './routes/auth';
 
 const logger = new Logger({ level: config.logLevel }, 'App');
@@ -120,6 +121,12 @@ export const createApp = (): Application => {
     authMiddleware.checkSetup,
     authMiddleware.authenticate,
     configRoutes
+  );
+  app.use(
+    '/api/webhooks',
+    authMiddleware.checkSetup,
+    authMiddleware.optional, // Allow N8N to register webhooks without full auth
+    webhooksRoutes
   );
 
   // Device-specific button routes (proper REST structure)
