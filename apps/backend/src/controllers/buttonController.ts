@@ -13,6 +13,8 @@ import { StreamDeckService } from '../services/streamDeckService';
 import { WebhookService } from '../services/webhookService';
 import { ButtonSyncService } from '../services/buttonSyncService';
 import { ButtonRepository } from '../services/repositories/buttonRepository';
+import { DeviceRepository } from '../services/repositories/deviceRepository';
+import { DeviceType } from '../../generated/prisma';
 import { config } from '../config/environment';
 
 const logger = new Logger({ level: config.logLevel }, 'ButtonController');
@@ -22,12 +24,14 @@ export class ButtonController {
   private webhookService: WebhookService;
   private syncService: ButtonSyncService;
   private buttonRepository: ButtonRepository;
+  private deviceRepository: DeviceRepository;
 
   constructor(streamDeckService: StreamDeckService) {
     this.streamDeckService = streamDeckService;
     this.webhookService = WebhookService.getInstance();
     this.syncService = ButtonSyncService.getInstance();
     this.buttonRepository = new ButtonRepository();
+    this.deviceRepository = new DeviceRepository();
 
     // Listen for device connection events to initialize buttons
     this.streamDeckService.on(
@@ -50,6 +54,9 @@ export class ButtonController {
       }
       logger.info('Device connected, initializing buttons', { deviceId });
 
+      // Ensure device exists in database
+      await this.ensureDeviceInDatabase(deviceId);
+
       // Get current button configurations for this device from database
       const buttons = await this.buttonRepository.findByDeviceId(deviceId);
       if (buttons && buttons.length > 0) {
@@ -67,6 +74,57 @@ export class ButtonController {
         error as Error
       );
     }
+  }
+
+  /**
+   * Ensure device exists in database, create if missing
+   */
+  private async ensureDeviceInDatabase(deviceId: string): Promise<boolean> {
+    try {
+      // Check if device exists in database
+      let dbDevice = await this.deviceRepository.findById(deviceId);
+      if (dbDevice) {
+        return true;
+      }
+
+      // Device not in database, get from StreamDeckService
+      const memoryDevice = this.streamDeckService.getDevice(deviceId);
+      if (!memoryDevice) {
+        return false;
+      }
+
+      // Create device in database
+      await this.deviceRepository.create({
+        name: memoryDevice.name,
+        type: this.mapDeviceType(memoryDevice.type),
+        serialNumber: memoryDevice.serialNumber || deviceId,
+        buttonCount: memoryDevice.buttonCount,
+        firmwareVersion: memoryDevice.firmwareVersion,
+        brightness: memoryDevice.brightness,
+      });
+
+      logger.info('Created device in database', { deviceId });
+      return true;
+    } catch (error) {
+      logger.error('Failed to ensure device in database', error as Error, {
+        deviceId,
+      });
+      return false;
+    }
+  }
+
+  /**
+   * Map device type string to DeviceType enum
+   */
+  private mapDeviceType(deviceType: string): DeviceType {
+    const typeMap: Record<string, DeviceType> = {
+      'streamdeck-original': DeviceType.STREAMDECK_ORIGINAL,
+      'streamdeck-mini': DeviceType.STREAMDECK_MINI,
+      'streamdeck-xl': DeviceType.STREAMDECK_XL,
+      'streamdeck-mk2': DeviceType.STREAMDECK_MK2,
+      'streamdeck-plus': DeviceType.STREAMDECK_PLUS,
+    };
+    return typeMap[deviceType] || DeviceType.STREAMDECK_ORIGINAL;
   }
 
   /**
@@ -127,7 +185,7 @@ export class ButtonController {
         limit,
       });
 
-      // Check if device exists
+      // Check if device exists in memory
       const device = this.streamDeckService.getDevice(deviceId);
       if (!device) {
         const errorResponse = createErrorResponse(
@@ -138,6 +196,20 @@ export class ButtonController {
           req.requestId
         );
         res.status(HttpStatusCode.NOT_FOUND).json(errorResponse);
+        return;
+      }
+
+      // Ensure device exists in database
+      const deviceInDb = await this.ensureDeviceInDatabase(deviceId);
+      if (!deviceInDb) {
+        const errorResponse = createErrorResponse(
+          {
+            code: ApiErrorCode.INTERNAL_ERROR,
+            message: 'Failed to register device in database',
+          },
+          req.requestId
+        );
+        res.status(HttpStatusCode.INTERNAL_SERVER_ERROR).json(errorResponse);
         return;
       }
 
@@ -248,7 +320,7 @@ export class ButtonController {
         title,
       });
 
-      // Check if device exists
+      // Check if device exists in memory
       const device = this.streamDeckService.getDevice(deviceId);
       if (!device) {
         const errorResponse = createErrorResponse(
@@ -259,6 +331,20 @@ export class ButtonController {
           req.requestId
         );
         res.status(HttpStatusCode.NOT_FOUND).json(errorResponse);
+        return;
+      }
+
+      // Ensure device exists in database
+      const deviceInDb = await this.ensureDeviceInDatabase(deviceId);
+      if (!deviceInDb) {
+        const errorResponse = createErrorResponse(
+          {
+            code: ApiErrorCode.INTERNAL_ERROR,
+            message: 'Failed to register device in database',
+          },
+          req.requestId
+        );
+        res.status(HttpStatusCode.INTERNAL_SERVER_ERROR).json(errorResponse);
         return;
       }
 
@@ -364,6 +450,456 @@ export class ButtonController {
         {
           code: ApiErrorCode.INTERNAL_ERROR,
           message: 'Failed to create/update button',
+          details: { error: (error as Error).message },
+        },
+        req.requestId
+      );
+
+      res.status(HttpStatusCode.INTERNAL_SERVER_ERROR).json(errorResponse);
+    }
+  }
+
+  /**
+   * PUT /devices/:deviceId/buttons/:buttonId - Update button configuration
+   */
+  async updateButton(req: Request, res: Response): Promise<void> {
+    try {
+      const { deviceId, buttonId } = req.params;
+      const {
+        title,
+        icon,
+        action,
+        backgroundColor,
+        textColor,
+        fontSize,
+        enabled = true,
+      } = req.body;
+
+      if (!deviceId || !buttonId) {
+        const errorResponse = createErrorResponse(
+          {
+            code: ApiErrorCode.VALIDATION_ERROR,
+            message: 'Device ID and Button ID are required',
+          },
+          req.requestId
+        );
+        res.status(HttpStatusCode.BAD_REQUEST).json(errorResponse);
+        return;
+      }
+
+      logger.info('Updating button', {
+        requestId: req.requestId,
+        deviceId,
+        buttonId,
+        title,
+      });
+
+      // Check if device exists in memory
+      const device = this.streamDeckService.getDevice(deviceId);
+      if (!device) {
+        const errorResponse = createErrorResponse(
+          {
+            code: ApiErrorCode.NOT_FOUND,
+            message: `Device with ID '${deviceId}' not found`,
+          },
+          req.requestId
+        );
+        res.status(HttpStatusCode.NOT_FOUND).json(errorResponse);
+        return;
+      }
+
+      // Ensure device exists in database
+      await this.ensureDeviceInDatabase(deviceId);
+
+      // Find button in database
+      const button = await this.buttonRepository.findById(buttonId);
+      if (!button) {
+        const errorResponse = createErrorResponse(
+          {
+            code: ApiErrorCode.NOT_FOUND,
+            message: `Button with ID '${buttonId}' not found`,
+          },
+          req.requestId
+        );
+        res.status(HttpStatusCode.NOT_FOUND).json(errorResponse);
+        return;
+      }
+
+      // Update button properties in database
+      const updateData: any = {};
+      if (title !== undefined) updateData.label = title;
+      if (icon !== undefined) updateData.icon = icon;
+      if (action !== undefined) {
+        updateData.actionType = action.type;
+        updateData.actionPayload = JSON.stringify(action);
+        updateData.n8nWorkflowId = action.n8nWorkflowId;
+        updateData.webhookUrl = action.webhookUrl;
+        updateData.command = action.command;
+        updateData.hotkey = action.hotkey
+          ? JSON.stringify(action.hotkey)
+          : undefined;
+      }
+      if (backgroundColor !== undefined)
+        updateData.backgroundColor = backgroundColor;
+      if (textColor !== undefined) updateData.textColor = textColor;
+      if (fontSize !== undefined) updateData.fontSize = fontSize;
+      if (enabled !== undefined) updateData.isEnabled = enabled;
+
+      const updatedButton = await this.buttonRepository.update(
+        button.id,
+        updateData
+      );
+
+      // Update physical device
+      const sharedButton = this.convertToSharedButton(updatedButton);
+      await this.updatePhysicalButton(deviceId, sharedButton);
+
+      const response = createSuccessResponse(
+        this.transformButtonToResponse(updatedButton),
+        'Button updated successfully',
+        req.requestId
+      );
+
+      res.status(HttpStatusCode.OK).json(response);
+    } catch (error) {
+      logger.error('Failed to update button', error as Error, {
+        requestId: req.requestId,
+        deviceId: req.params.deviceId,
+        buttonId: req.params.buttonId,
+      });
+
+      const errorResponse = createErrorResponse(
+        {
+          code: ApiErrorCode.INTERNAL_ERROR,
+          message: 'Failed to update button',
+          details: { error: (error as Error).message },
+        },
+        req.requestId
+      );
+
+      res.status(HttpStatusCode.INTERNAL_SERVER_ERROR).json(errorResponse);
+    }
+  }
+
+  /**
+   * GET /devices/:deviceId/buttons/:buttonId - Get button details
+   */
+  async getButton(req: Request, res: Response): Promise<void> {
+    try {
+      const { deviceId, buttonId } = req.params;
+
+      if (!deviceId || !buttonId) {
+        const errorResponse = createErrorResponse(
+          {
+            code: ApiErrorCode.VALIDATION_ERROR,
+            message: 'Device ID and Button ID are required',
+          },
+          req.requestId
+        );
+        res.status(HttpStatusCode.BAD_REQUEST).json(errorResponse);
+        return;
+      }
+
+      logger.info('Fetching button details', {
+        requestId: req.requestId,
+        deviceId,
+        buttonId,
+      });
+
+      // Check if device exists in memory
+      const device = this.streamDeckService.getDevice(deviceId);
+      if (!device) {
+        const errorResponse = createErrorResponse(
+          {
+            code: ApiErrorCode.NOT_FOUND,
+            message: `Device with ID '${deviceId}' not found`,
+          },
+          req.requestId
+        );
+        res.status(HttpStatusCode.NOT_FOUND).json(errorResponse);
+        return;
+      }
+
+      // Find button in database
+      const button = await this.buttonRepository.findById(buttonId);
+      if (!button) {
+        const errorResponse = createErrorResponse(
+          {
+            code: ApiErrorCode.NOT_FOUND,
+            message: `Button with ID '${buttonId}' not found`,
+          },
+          req.requestId
+        );
+        res.status(HttpStatusCode.NOT_FOUND).json(errorResponse);
+        return;
+      }
+
+      const response = createSuccessResponse(
+        this.transformButtonToResponse(button),
+        'Button found',
+        req.requestId
+      );
+
+      res.status(HttpStatusCode.OK).json(response);
+    } catch (error) {
+      logger.error('Failed to get button', error as Error, {
+        requestId: req.requestId,
+        deviceId: req.params.deviceId,
+        buttonId: req.params.buttonId,
+      });
+
+      const errorResponse = createErrorResponse(
+        {
+          code: ApiErrorCode.INTERNAL_ERROR,
+          message: 'Failed to retrieve button',
+          details: { error: (error as Error).message },
+        },
+        req.requestId
+      );
+
+      res.status(HttpStatusCode.INTERNAL_SERVER_ERROR).json(errorResponse);
+    }
+  }
+
+  /**
+   * DELETE /devices/:deviceId/buttons/:buttonId - Delete button
+   */
+  async deleteButton(req: Request, res: Response): Promise<void> {
+    try {
+      const { deviceId, buttonId } = req.params;
+
+      if (!deviceId || !buttonId) {
+        const errorResponse = createErrorResponse(
+          {
+            code: ApiErrorCode.VALIDATION_ERROR,
+            message: 'Device ID and Button ID are required',
+          },
+          req.requestId
+        );
+        res.status(HttpStatusCode.BAD_REQUEST).json(errorResponse);
+        return;
+      }
+
+      logger.info('Deleting button', {
+        requestId: req.requestId,
+        deviceId,
+        buttonId,
+      });
+
+      // Check if device exists in memory
+      const device = this.streamDeckService.getDevice(deviceId);
+      if (!device) {
+        const errorResponse = createErrorResponse(
+          {
+            code: ApiErrorCode.NOT_FOUND,
+            message: `Device with ID '${deviceId}' not found`,
+          },
+          req.requestId
+        );
+        res.status(HttpStatusCode.NOT_FOUND).json(errorResponse);
+        return;
+      }
+
+      // Find button in database
+      const button = await this.buttonRepository.findById(buttonId);
+      if (!button) {
+        const errorResponse = createErrorResponse(
+          {
+            code: ApiErrorCode.NOT_FOUND,
+            message: `Button with ID '${buttonId}' not found`,
+          },
+          req.requestId
+        );
+        res.status(HttpStatusCode.NOT_FOUND).json(errorResponse);
+        return;
+      }
+
+      // Reset button to default (update in database)
+      const defaultButton = await this.buttonRepository.update(button.id, {
+        label: undefined,
+        icon: undefined,
+        actionType: undefined,
+        actionPayload: undefined,
+        n8nWorkflowId: undefined,
+        webhookUrl: undefined,
+        command: undefined,
+        hotkey: undefined,
+        backgroundColor: undefined,
+        textColor: undefined,
+        fontSize: undefined,
+        isEnabled: true,
+      });
+
+      const response = createSuccessResponse(
+        this.transformButtonToResponse(defaultButton),
+        'Button reset to default successfully',
+        req.requestId
+      );
+
+      res.status(HttpStatusCode.OK).json(response);
+    } catch (error) {
+      logger.error('Failed to delete button', error as Error, {
+        requestId: req.requestId,
+        deviceId: req.params.deviceId,
+        buttonId: req.params.buttonId,
+      });
+
+      const errorResponse = createErrorResponse(
+        {
+          code: ApiErrorCode.INTERNAL_ERROR,
+          message: 'Failed to delete button',
+          details: { error: (error as Error).message },
+        },
+        req.requestId
+      );
+
+      res.status(HttpStatusCode.INTERNAL_SERVER_ERROR).json(errorResponse);
+    }
+  }
+
+  /**
+   * POST /devices/:deviceId/buttons/:buttonId/press - Simulate button press
+   */
+  async pressButton(req: Request, res: Response): Promise<void> {
+    try {
+      const { deviceId, buttonId } = req.params;
+
+      if (!deviceId || !buttonId) {
+        const errorResponse = createErrorResponse(
+          {
+            code: ApiErrorCode.VALIDATION_ERROR,
+            message: 'Device ID and Button ID are required',
+          },
+          req.requestId
+        );
+        res.status(HttpStatusCode.BAD_REQUEST).json(errorResponse);
+        return;
+      }
+
+      logger.info('Simulating button press', {
+        requestId: req.requestId,
+        deviceId,
+        buttonId,
+      });
+
+      // Check if device exists and is connected
+      const device = this.streamDeckService.getDevice(deviceId);
+      if (!device) {
+        const errorResponse = createErrorResponse(
+          {
+            code: ApiErrorCode.NOT_FOUND,
+            message: `Device with ID '${deviceId}' not found`,
+          },
+          req.requestId
+        );
+        res.status(HttpStatusCode.NOT_FOUND).json(errorResponse);
+        return;
+      }
+
+      if (!this.streamDeckService.isDeviceConnected(deviceId)) {
+        const errorResponse = createErrorResponse(
+          {
+            code: ApiErrorCode.DEVICE_NOT_CONNECTED,
+            message: 'Device is not connected',
+          },
+          req.requestId
+        );
+        res.status(HttpStatusCode.BAD_REQUEST).json(errorResponse);
+        return;
+      }
+
+      // Get button from database
+      const button = await this.buttonRepository.findById(buttonId);
+
+      if (!button) {
+        const errorResponse = createErrorResponse(
+          {
+            code: ApiErrorCode.NOT_FOUND,
+            message: `Button with ID '${buttonId}' not found`,
+          },
+          req.requestId
+        );
+        res.status(HttpStatusCode.NOT_FOUND).json(errorResponse);
+        return;
+      }
+
+      if (!button.isEnabled) {
+        const errorResponse = createErrorResponse(
+          {
+            code: ApiErrorCode.VALIDATION_ERROR,
+            message: 'Button is disabled',
+          },
+          req.requestId
+        );
+        res.status(HttpStatusCode.BAD_REQUEST).json(errorResponse);
+        return;
+      }
+
+      // Send webhook event for button press
+      const buttonPressEvent = {
+        event: 'pressed' as const,
+        deviceId,
+        buttonId: button.id,
+        position: button.index,
+        timestamp: new Date().toISOString(),
+        button: {
+          id: button.id,
+          deviceId: button.deviceId,
+          position: button.index,
+          title: button.label,
+          enabled: button.isEnabled,
+          backgroundColor: button.backgroundColor,
+          textColor: button.textColor,
+          fontSize: button.fontSize,
+        },
+        device: {
+          id: device.id,
+          name: device.name,
+          model: device.type,
+          connected: device.isConnected,
+          buttonCount: device.buttonCount,
+        },
+      };
+
+      // Send to webhooks (don't wait for completion)
+      this.webhookService
+        .sendButtonPressEvent(buttonPressEvent)
+        .catch((error) => {
+          logger.error('Failed to send webhook events', error as Error, {
+            deviceId,
+            buttonId: button.id,
+          });
+        });
+
+      const response = createSuccessResponse(
+        {
+          buttonId: button.id,
+          index: button.index,
+          action: button.actionType
+            ? {
+                type: button.actionType,
+                payload: button.actionPayload
+                  ? JSON.parse(button.actionPayload)
+                  : {},
+              }
+            : undefined,
+        },
+        'Button pressed successfully',
+        req.requestId
+      );
+
+      res.status(HttpStatusCode.OK).json(response);
+    } catch (error) {
+      logger.error('Failed to press button', error as Error, {
+        requestId: req.requestId,
+        deviceId: req.params.deviceId,
+        buttonId: req.params.buttonId,
+      });
+
+      const errorResponse = createErrorResponse(
+        {
+          code: ApiErrorCode.INTERNAL_ERROR,
+          message: 'Failed to execute button press',
           details: { error: (error as Error).message },
         },
         req.requestId
