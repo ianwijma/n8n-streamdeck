@@ -58,9 +58,7 @@ export class DeviceController {
       await this.streamDeckService.discoverDevices();
 
       // Get all devices from the service
-      let devices = Array.from(
-        (this.streamDeckService as any).deviceInfo.values()
-      ) as Device[];
+      let devices = this.streamDeckService.getDevices();
 
       // Transform devices to match frontend API expectations
       const transformedDevices = devices.map(transformDeviceForApi);

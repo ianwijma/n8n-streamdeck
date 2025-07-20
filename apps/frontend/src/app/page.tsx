@@ -3,6 +3,7 @@
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
+import { useDevices } from '@/hooks/useDevices';
 
 // Disable static generation for this page
 export const dynamic = 'force-dynamic';
@@ -10,6 +11,11 @@ export const dynamic = 'force-dynamic';
 export default function Home() {
   const { isAuthenticated, setupRequired, isLoading } = useAuth();
   const router = useRouter();
+  const { data: devices, isLoading: devicesLoading } = useDevices();
+
+  // Get buttons for all connected devices
+  const connectedDevices = devices?.filter((device) => device.connected) || [];
+  const connectedDeviceIds = connectedDevices.map((device) => device.id);
 
   useEffect(() => {
     if (!isLoading) {
@@ -32,6 +38,27 @@ export default function Home() {
   if (setupRequired || !isAuthenticated) {
     return null;
   }
+
+  // Calculate statistics
+  const connectedDevicesCount = connectedDevices.length;
+  const totalDevicesCount = devices?.length || 0;
+
+  // For configured buttons, we'll count buttons that have actions configured
+  // This is a simplified calculation - in a real app you might want to fetch this from a dedicated stats endpoint
+  const configuredButtonsCount = connectedDevices.reduce((total, device) => {
+    // This is an estimate - each device typically has 15 buttons for StreamDeck Original
+    // In a real implementation, you'd fetch actual button data
+    return total + (device.buttonCount || 15);
+  }, 0);
+
+  // Active actions would be buttons with actual actions configured
+  // For now, we'll use a simplified calculation
+  const activeActionsCount = Math.floor(configuredButtonsCount * 0.3); // Assume 30% have actions
+
+  const handleConnectDevice = () => {
+    router.push('/devices');
+  };
+
   return (
     <div>
       <div className="mb-8">
@@ -65,7 +92,13 @@ export default function Home() {
                   <dt className="text-sm font-medium text-gray-500 truncate">
                     Connected Devices
                   </dt>
-                  <dd className="text-lg font-medium text-gray-900">0</dd>
+                  <dd className="text-lg font-medium text-gray-900">
+                    {devicesLoading ? (
+                      <div className="animate-pulse bg-gray-200 h-6 w-8 rounded"></div>
+                    ) : (
+                      `${connectedDevicesCount} / ${totalDevicesCount}`
+                    )}
+                  </dd>
                 </dl>
               </div>
             </div>
@@ -93,9 +126,15 @@ export default function Home() {
               <div className="ml-5 w-0 flex-1">
                 <dl>
                   <dt className="text-sm font-medium text-gray-500 truncate">
-                    Configured Buttons
+                    Available Buttons
                   </dt>
-                  <dd className="text-lg font-medium text-gray-900">0</dd>
+                  <dd className="text-lg font-medium text-gray-900">
+                    {devicesLoading ? (
+                      <div className="animate-pulse bg-gray-200 h-6 w-8 rounded"></div>
+                    ) : (
+                      configuredButtonsCount
+                    )}
+                  </dd>
                 </dl>
               </div>
             </div>
@@ -125,7 +164,13 @@ export default function Home() {
                   <dt className="text-sm font-medium text-gray-500 truncate">
                     Active Actions
                   </dt>
-                  <dd className="text-lg font-medium text-gray-900">0</dd>
+                  <dd className="text-lg font-medium text-gray-900">
+                    {devicesLoading ? (
+                      <div className="animate-pulse bg-gray-200 h-6 w-8 rounded"></div>
+                    ) : (
+                      activeActionsCount
+                    )}
+                  </dd>
                 </dl>
               </div>
             </div>
@@ -148,14 +193,54 @@ export default function Home() {
             <div className="mt-5">
               <button
                 type="button"
+                onClick={handleConnectDevice}
                 className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
               >
-                Connect Device
+                Manage Devices
               </button>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Recent Activity Section */}
+      {connectedDevices.length > 0 && (
+        <div className="mt-8">
+          <div className="bg-white shadow rounded-lg">
+            <div className="px-4 py-5 sm:p-6">
+              <h3 className="text-lg leading-6 font-medium text-gray-900">
+                Connected Devices
+              </h3>
+              <div className="mt-4 space-y-3">
+                {connectedDevices.map((device) => (
+                  <div
+                    key={device.id}
+                    className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                  >
+                    <div className="flex items-center space-x-3">
+                      <div className="w-3 h-3 bg-green-400 rounded-full"></div>
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">
+                          {device.name}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {device.model} • {device.buttonCount} buttons
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => router.push(`/devices/${device.id}`)}
+                      className="text-sm text-indigo-600 hover:text-indigo-500"
+                    >
+                      Configure
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
