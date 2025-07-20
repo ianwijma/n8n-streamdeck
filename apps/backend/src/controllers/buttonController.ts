@@ -755,6 +755,20 @@ export class ButtonController {
         isEnabled: true,
       });
 
+      // Update physical device button
+      try {
+        await this.updatePhysicalButton(
+          deviceId,
+          this.convertToSharedButton(defaultButton)
+        );
+      } catch (syncError) {
+        logger.warn('Failed to sync reset button to physical device', {
+          deviceId,
+          buttonId: defaultButton.id,
+          error: (syncError as Error).message,
+        });
+      }
+
       const response = createSuccessResponse(
         this.transformButtonToResponse(defaultButton),
         'Button reset to default successfully',
@@ -1045,14 +1059,49 @@ export class ButtonController {
 
       // If there's a button at the target position, we need to swap them
       if (targetButton) {
-        // Update both buttons' positions
-        await this.buttonRepository.update(button.id, { index: position });
-        await this.buttonRepository.update(targetButton.id, {
-          index: button.index,
-        });
+        // Use atomic swap to avoid constraint violations
+        const { button1: updatedButton, button2: updatedTargetButton } =
+          await this.buttonRepository.swapButtons(button.id, targetButton.id);
+
+        // Update physical device buttons
+        try {
+          await Promise.all([
+            this.updatePhysicalButton(
+              deviceId,
+              this.convertToSharedButton(updatedButton)
+            ),
+            this.updatePhysicalButton(
+              deviceId,
+              this.convertToSharedButton(updatedTargetButton)
+            ),
+          ]);
+        } catch (syncError) {
+          logger.warn('Failed to sync buttons to physical device', {
+            deviceId,
+            buttonIds: [updatedButton.id, updatedTargetButton.id],
+            error: (syncError as Error).message,
+          });
+        }
       } else {
         // Just move the button to the new position
         await this.buttonRepository.update(button.id, { index: position });
+
+        // Update physical device button
+        const updatedButton = await this.buttonRepository.findById(buttonId);
+        if (updatedButton) {
+          try {
+            await this.updatePhysicalButton(
+              deviceId,
+              this.convertToSharedButton(updatedButton)
+            );
+          } catch (syncError) {
+            logger.warn('Failed to sync button to physical device', {
+              deviceId,
+              buttonId: updatedButton.id,
+              error: (syncError as Error).message,
+            });
+          }
+        }
       }
 
       // Get the updated button
@@ -1140,20 +1189,34 @@ export class ButtonController {
         return;
       }
 
-      // Swap the positions
-      const tempIndex = button1.index;
-      await this.buttonRepository.update(button1.id, { index: button2.index });
-      await this.buttonRepository.update(button2.id, { index: tempIndex });
+      // Swap the positions atomically
+      const { button1: updatedButton1, button2: updatedButton2 } =
+        await this.buttonRepository.swapButtons(button1.id, button2.id);
 
-      // Get the updated buttons
-      const updatedButton1 = await this.buttonRepository.findById(buttonId);
-      const updatedButton2 =
-        await this.buttonRepository.findById(targetButtonId);
+      // Update physical device buttons
+      try {
+        await Promise.all([
+          this.updatePhysicalButton(
+            deviceId,
+            this.convertToSharedButton(updatedButton1)
+          ),
+          this.updatePhysicalButton(
+            deviceId,
+            this.convertToSharedButton(updatedButton2)
+          ),
+        ]);
+      } catch (syncError) {
+        logger.warn('Failed to sync buttons to physical device', {
+          deviceId,
+          buttonIds: [updatedButton1.id, updatedButton2.id],
+          error: (syncError as Error).message,
+        });
+      }
 
       const response = createSuccessResponse(
         {
-          button1: this.transformButtonToResponse(updatedButton1!),
-          button2: this.transformButtonToResponse(updatedButton2!),
+          button1: this.transformButtonToResponse(updatedButton1),
+          button2: this.transformButtonToResponse(updatedButton2),
         },
         'Buttons swapped successfully',
         req.requestId
@@ -1262,6 +1325,20 @@ export class ButtonController {
           }
         );
 
+        // Update physical device button
+        try {
+          await this.updatePhysicalButton(
+            deviceId,
+            this.convertToSharedButton(updatedButton)
+          );
+        } catch (syncError) {
+          logger.warn('Failed to sync copied button to physical device', {
+            deviceId,
+            buttonId: updatedButton.id,
+            error: (syncError as Error).message,
+          });
+        }
+
         const response = createSuccessResponse(
           this.transformButtonToResponse(updatedButton),
           'Button copied successfully',
@@ -1290,6 +1367,20 @@ export class ButtonController {
           textColor: sourceButton.textColor || undefined,
           fontSize: sourceButton.fontSize || undefined,
         });
+
+        // Update physical device button
+        try {
+          await this.updatePhysicalButton(
+            deviceId,
+            this.convertToSharedButton(newButton)
+          );
+        } catch (syncError) {
+          logger.warn('Failed to sync new button to physical device', {
+            deviceId,
+            buttonId: newButton.id,
+            error: (syncError as Error).message,
+          });
+        }
 
         const response = createSuccessResponse(
           this.transformButtonToResponse(newButton),
@@ -1345,6 +1436,16 @@ export class ButtonController {
 
       // Delete all buttons for the device
       const result = await this.buttonRepository.deleteByDeviceId(deviceId);
+
+      // Clear all buttons on physical device
+      try {
+        await this.syncService.resetDeviceButtons(deviceId);
+      } catch (syncError) {
+        logger.warn('Failed to clear buttons on physical device', {
+          deviceId,
+          error: (syncError as Error).message,
+        });
+      }
 
       const response = createSuccessResponse(
         { deletedCount: result.count },

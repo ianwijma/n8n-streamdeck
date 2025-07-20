@@ -133,4 +133,51 @@ export class ButtonRepository {
       },
     });
   }
+
+  async swapButtons(
+    button1Id: string,
+    button2Id: string
+  ): Promise<{ button1: Button; button2: Button }> {
+    return this.prisma.$transaction(async (tx) => {
+      // Get both buttons
+      const button1 = await tx.button.findUnique({ where: { id: button1Id } });
+      const button2 = await tx.button.findUnique({ where: { id: button2Id } });
+
+      if (!button1 || !button2) {
+        throw new Error('One or both buttons not found');
+      }
+
+      // Use a temporary index that's guaranteed to be unique
+      // We'll use negative values to avoid conflicts
+      const tempIndex = -Math.abs(button1.index + button2.index + 1000);
+
+      // Step 1: Move button1 to temporary index
+      await tx.button.update({
+        where: { id: button1Id },
+        data: { index: tempIndex },
+      });
+
+      // Step 2: Move button2 to button1's original index
+      await tx.button.update({
+        where: { id: button2Id },
+        data: { index: button1.index },
+      });
+
+      // Step 3: Move button1 to button2's original index
+      const updatedButton1 = await tx.button.update({
+        where: { id: button1Id },
+        data: { index: button2.index },
+      });
+
+      // Get the final state of button2
+      const updatedButton2 = await tx.button.findUnique({
+        where: { id: button2Id },
+      });
+
+      return {
+        button1: updatedButton1,
+        button2: updatedButton2!,
+      };
+    });
+  }
 }
