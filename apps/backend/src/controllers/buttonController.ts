@@ -43,7 +43,13 @@ export class ButtonController {
    */
   private async handleDeviceConnected(event: any): Promise<void> {
     try {
-      const deviceId = event.data.device.id;
+      const deviceId = event.data.device?.id || event.data.device?.deviceId;
+      if (!deviceId) {
+        logger.warn('Device connected event missing device ID', {
+          event: event.data,
+        });
+        return;
+      }
       logger.info('Device connected, initializing buttons', { deviceId });
 
       // Get current button configurations for this device
@@ -736,15 +742,11 @@ export class ButtonController {
           });
         });
 
-      // Execute button action
-      const result = await this.executeButtonAction(button);
-
       const response = createSuccessResponse(
         {
           buttonId: button.id,
           index: button.index,
           action: button.action,
-          result,
         },
         'Button pressed successfully',
         req.requestId
@@ -870,68 +872,5 @@ export class ButtonController {
       default:
         return true;
     }
-  }
-
-  /**
-   * Execute button action
-   */
-  private async executeButtonAction(button: Button): Promise<any> {
-    if (!button.action) {
-      return { message: 'No action configured' };
-    }
-
-    logger.info('Executing button action', {
-      buttonId: button.id,
-      actionType: button.action.type,
-    });
-
-    switch (button.action.type) {
-      case ButtonActionType.TRIGGER_WORKFLOW:
-        return this.executeWorkflowTrigger(button.action);
-      case ButtonActionType.WEBHOOK:
-        return this.executeWebhook(button.action);
-      case ButtonActionType.HOTKEY:
-        return this.executeHotkey(button.action);
-      case ButtonActionType.COMMAND:
-        return this.executeCommand(button.action);
-      default:
-        return {
-          message: `Action type '${button.action.type}' not implemented`,
-        };
-    }
-  }
-
-  private async executeWorkflowTrigger(action: ButtonAction): Promise<any> {
-    // TODO: Implement n8n workflow trigger
-    return {
-      message: 'Workflow trigger executed',
-      workflowId: action.n8nWorkflowId,
-      payload: action.payload,
-    };
-  }
-
-  private async executeWebhook(action: ButtonAction): Promise<any> {
-    // TODO: Implement webhook call
-    return {
-      message: 'Webhook executed',
-      url: action.webhookUrl,
-      payload: action.payload,
-    };
-  }
-
-  private async executeHotkey(action: ButtonAction): Promise<any> {
-    // TODO: Implement hotkey simulation
-    return {
-      message: 'Hotkey executed',
-      keys: action.hotkey,
-    };
-  }
-
-  private async executeCommand(action: ButtonAction): Promise<any> {
-    // TODO: Implement command execution
-    return {
-      message: 'Command executed',
-      command: action.command,
-    };
   }
 }
