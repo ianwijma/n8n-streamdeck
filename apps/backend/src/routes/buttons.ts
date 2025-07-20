@@ -14,7 +14,7 @@ const router: ExpressRouter = Router();
 const logger = new Logger({ level: config.logLevel }, 'ButtonsRoute');
 
 // Initialize StreamDeck service and controller
-const streamDeckService = new StreamDeckService();
+const streamDeckService = StreamDeckService.getInstance();
 const buttonController = new ButtonController(streamDeckService);
 
 // GET /api/buttons - List buttons (requires deviceId query param)

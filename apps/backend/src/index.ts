@@ -2,6 +2,8 @@ import { Server } from 'http';
 import { Logger } from '@n8n-streamdeck/shared';
 import { config } from './config/environment';
 import { createApp } from './app';
+import { StreamDeckService } from './services/streamDeckService';
+import { WebSocketService } from './services/websocketService';
 
 const logger = new Logger({ level: config.logLevel }, 'Server');
 
@@ -12,8 +14,14 @@ const startServer = async (): Promise<void> => {
     // Create Express application
     const app = createApp();
 
+    // Initialize StreamDeck service and discover devices
+    const streamDeckService = StreamDeckService.getInstance();
+
     // Start HTTP server
-    server = app.listen(config.port, config.host, () => {
+    server = app.listen(config.port, config.host, async () => {
+      // Initialize WebSocket service after server starts
+      const webSocketService = WebSocketService.getInstance();
+      webSocketService.initialize(server);
       logger.info('Server started successfully', {
         port: config.port,
         host: config.host,
@@ -32,6 +40,39 @@ const startServer = async (): Promise<void> => {
           health: `http://${config.host}:${config.port}/api/health`,
         },
       });
+
+      // Discover and auto-connect to StreamDeck devices
+      try {
+        logger.info('Starting StreamDeck device discovery...');
+        const devices = await streamDeckService.discoverDevices();
+        logger.info(`Discovered ${devices.length} StreamDeck device(s)`);
+
+        // Auto-connect to discovered devices if autoConnect is enabled
+        if (config.streamdeck.autoConnect && devices.length > 0) {
+          logger.info('Auto-connecting to discovered devices...');
+          const connectionPromises = devices.map(async (device) => {
+            try {
+              await streamDeckService.connectToDevice(device.id);
+              logger.info(
+                `Successfully connected to device: ${device.name} (${device.id})`
+              );
+            } catch (error) {
+              logger.error(
+                `Failed to connect to device: ${device.name} (${device.id})`,
+                error as Error
+              );
+            }
+          });
+
+          await Promise.allSettled(connectionPromises);
+          const connectedDevices = streamDeckService.getConnectedDevices();
+          logger.info(
+            `Auto-connection completed. ${connectedDevices.length}/${devices.length} devices connected`
+          );
+        }
+      } catch (error) {
+        logger.error('Failed to discover StreamDeck devices', error as Error);
+      }
     });
 
     // Handle server errors
@@ -50,34 +91,46 @@ const startServer = async (): Promise<void> => {
     server.on('close', () => {
       logger.info('Server closed');
     });
-
   } catch (error) {
     logger.error('Failed to start server', error as Error);
     process.exit(1);
   }
 };
 
-const gracefulShutdown = (signal: string): void => {
+const gracefulShutdown = async (signal: string): Promise<void> => {
   logger.info(`Received ${signal}, starting graceful shutdown`);
 
-  if (server) {
-    server.close((error) => {
-      if (error) {
-        logger.error('Error during server shutdown', error);
+  try {
+    // Shutdown WebSocket service first
+    const webSocketService = WebSocketService.getInstance();
+    await webSocketService.shutdown();
+
+    // Shutdown StreamDeck service
+    const streamDeckService = StreamDeckService.getInstance();
+    await streamDeckService.shutdown();
+
+    if (server) {
+      server.close((error) => {
+        if (error) {
+          logger.error('Error during server shutdown', error);
+          process.exit(1);
+        }
+
+        logger.info('Server shutdown completed');
+        process.exit(0);
+      });
+
+      // Force shutdown after 10 seconds
+      setTimeout(() => {
+        logger.warn('Forcing server shutdown after timeout');
         process.exit(1);
-      }
-
-      logger.info('Server shutdown completed');
+      }, 10000);
+    } else {
       process.exit(0);
-    });
-
-    // Force shutdown after 10 seconds
-    setTimeout(() => {
-      logger.warn('Forcing server shutdown after timeout');
-      process.exit(1);
-    }, 10000);
-  } else {
-    process.exit(0);
+    }
+  } catch (error) {
+    logger.error('Error during graceful shutdown', error as Error);
+    process.exit(1);
   }
 };
 

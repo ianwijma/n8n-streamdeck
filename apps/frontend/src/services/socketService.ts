@@ -39,8 +39,9 @@ export class SocketService {
     this.options = {
       url:
         options.url ||
+        process.env.NEXT_PUBLIC_WS_URL ||
         (typeof window !== 'undefined'
-          ? window.location.origin
+          ? `${window.location.protocol}//${window.location.hostname}:3001`
           : 'http://localhost:3001'),
       autoConnect: options.autoConnect ?? true,
       reconnectionAttempts: options.reconnectionAttempts ?? 5,

@@ -46,9 +46,20 @@ export class DeviceController {
         (this.streamDeckService as any).deviceInfo.values()
       ) as Device[];
 
+      // Transform devices to match frontend API expectations
+      const transformedDevices = devices.map((device) => ({
+        ...device,
+        connected: device.isConnected, // Map isConnected to connected for frontend
+        createdAt: device.createdAt.toISOString(),
+        updatedAt: device.updatedAt.toISOString(),
+      }));
+
       // Filter disconnected devices if requested
+      let filteredDevices = transformedDevices;
       if (includeDisconnected === 'false') {
-        devices = devices.filter((device) => device.isConnected);
+        filteredDevices = transformedDevices.filter(
+          (device) => device.connected
+        );
       }
 
       // Pagination
@@ -59,7 +70,7 @@ export class DeviceController {
       );
       const startIndex = (pageNum - 1) * limitNum;
       const endIndex = startIndex + limitNum;
-      const paginatedDevices = devices.slice(startIndex, endIndex);
+      const paginatedDevices = filteredDevices.slice(startIndex, endIndex);
 
       const response = createSuccessResponse(
         paginatedDevices,
@@ -71,9 +82,9 @@ export class DeviceController {
       (response as any).pagination = {
         page: pageNum,
         limit: limitNum,
-        total: devices.length,
-        totalPages: Math.ceil(devices.length / limitNum),
-        hasNext: endIndex < devices.length,
+        total: filteredDevices.length,
+        totalPages: Math.ceil(filteredDevices.length / limitNum),
+        hasNext: endIndex < filteredDevices.length,
         hasPrev: pageNum > 1,
       };
 
@@ -134,8 +145,16 @@ export class DeviceController {
         return;
       }
 
+      // Transform device to match frontend API expectations
+      const transformedDevice = {
+        ...device,
+        connected: device.isConnected,
+        createdAt: device.createdAt.toISOString(),
+        updatedAt: device.updatedAt.toISOString(),
+      };
+
       const response = createSuccessResponse(
-        device,
+        transformedDevice,
         'Device found',
         req.requestId
       );
@@ -217,8 +236,18 @@ export class DeviceController {
       // Get updated device info
       const updatedDevice = this.streamDeckService.getDevice(id);
 
+      // Transform device to match frontend API expectations
+      const transformedDevice = updatedDevice
+        ? {
+            ...updatedDevice,
+            connected: updatedDevice.isConnected,
+            createdAt: updatedDevice.createdAt.toISOString(),
+            updatedAt: updatedDevice.updatedAt.toISOString(),
+          }
+        : null;
+
       const response = createSuccessResponse(
-        updatedDevice,
+        transformedDevice,
         'Device connected successfully',
         req.requestId
       );
@@ -300,8 +329,18 @@ export class DeviceController {
       // Get updated device info
       const updatedDevice = this.streamDeckService.getDevice(id);
 
+      // Transform device to match frontend API expectations
+      const transformedDevice = updatedDevice
+        ? {
+            ...updatedDevice,
+            connected: updatedDevice.isConnected,
+            createdAt: updatedDevice.createdAt.toISOString(),
+            updatedAt: updatedDevice.updatedAt.toISOString(),
+          }
+        : null;
+
       const response = createSuccessResponse(
-        updatedDevice,
+        transformedDevice,
         'Device disconnected successfully',
         req.requestId
       );

@@ -14,7 +14,7 @@ const router: ExpressRouter = Router();
 const logger = new Logger({ level: config.logLevel }, 'DevicesRoute');
 
 // Initialize StreamDeck service and controller
-const streamDeckService = new StreamDeckService();
+const streamDeckService = StreamDeckService.getInstance();
 const deviceController = new DeviceController(streamDeckService);
 
 // GET /api/devices - List all devices
