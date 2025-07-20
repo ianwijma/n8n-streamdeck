@@ -27,8 +27,9 @@ RUN pnpm --filter @n8n-streamdeck/shared build
 RUN pnpm --filter @n8n-streamdeck/config build
 
 # Set Next.js environment variables for build
+ARG NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
-ENV NODE_ENV=production
+ENV NODE_ENV=${NODE_ENV}
 
 # Build frontend application
 RUN pnpm --filter @n8n-streamdeck/frontend build

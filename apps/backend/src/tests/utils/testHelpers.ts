@@ -1,6 +1,6 @@
-import { Request, Response } from 'express';
+import { Request, Response as ExpressResponse } from 'express';
 import { Application } from 'express';
-import request from 'supertest';
+import request, { Response } from 'supertest';
 import { createApp } from '../../app';
 import { StreamDeckService } from '../../services/streamDeckService';
 import {
@@ -107,7 +107,7 @@ export class ApiTestHelper {
   }
 
   // Device API helpers
-  async getDevices(query: Record<string, string> = {}) {
+  async getDevices(query: Record<string, string> = {}): Promise<Response> {
     const queryString = new URLSearchParams(query).toString();
     const url = `/api/devices${queryString ? `?${queryString}` : ''}`;
     return request(this.app).get(url);

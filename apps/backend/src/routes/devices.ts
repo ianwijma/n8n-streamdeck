@@ -1,11 +1,16 @@
-import { Router, Request, Response } from 'express';
+import {
+  Router,
+  Request,
+  Response,
+  type Router as ExpressRouter,
+} from 'express';
 import { Logger } from '@n8n-streamdeck/shared';
 import { config } from '../config/environment';
 import { asyncHandler } from '../middleware/errorHandler';
 import { DeviceController } from '../controllers/deviceController';
 import { StreamDeckService } from '../services/streamDeckService';
 
-const router = Router();
+const router: ExpressRouter = Router();
 const logger = new Logger({ level: config.logLevel }, 'DevicesRoute');
 
 // Initialize StreamDeck service and controller

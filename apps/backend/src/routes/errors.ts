@@ -1,8 +1,13 @@
-import { Router, Request, Response } from 'express';
+import {
+  Router,
+  Request,
+  Response,
+  type Router as ExpressRouter,
+} from 'express';
 import { Logger, LogLevel } from '@n8n-streamdeck/shared';
 import { z } from 'zod';
 
-const router = Router();
+const router: ExpressRouter = Router();
 const logger = new Logger({ level: LogLevel.DEBUG }, 'error-reporting');
 
 // Error report schema for validation
@@ -106,7 +111,7 @@ router.post('/report', async (req: Request, res: Response) => {
       message: 'Error report received and logged',
       timestamp: new Date().toISOString(),
     });
-  } catch (error) {
+  } catch (error: unknown) {
     // Handle validation errors
     if (error instanceof z.ZodError) {
       logger.warn('Invalid error report received', {

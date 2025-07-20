@@ -1,4 +1,9 @@
-import { Router, Request, Response } from 'express';
+import {
+  Router,
+  Request,
+  Response,
+  type Router as ExpressRouter,
+} from 'express';
 import {
   createSuccessResponse,
   HealthCheckResponse,
@@ -9,7 +14,7 @@ import { asyncHandler } from '../middleware/errorHandler';
 import { performanceMonitor } from '../services/performanceMonitor';
 import { metricsCollector } from '../services/metricsCollector';
 
-const router = Router();
+const router: ExpressRouter = Router();
 const logger = new Logger({ level: config.logLevel }, 'HealthRoute');
 
 // Health check endpoint

@@ -7,7 +7,8 @@ const nextConfig = {
 
   // Performance optimizations
   experimental: {
-    optimizeCss: true,
+    // Disable CSS optimization for development builds to avoid critters dependency issue
+    optimizeCss: process.env.NODE_ENV === 'production',
     optimizePackageImports: ['@tanstack/react-query', 'socket.io-client'],
   },
 

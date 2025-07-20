@@ -1,9 +1,9 @@
-import { Router } from 'express';
+import { Router, type Router as ExpressRouter } from 'express';
 import { AuthController } from '../controllers/authController';
 import { AuthMiddleware, createRateLimiter } from '../middleware/auth';
 import { AuthService } from '../services/authService';
 
-const router = Router();
+const router: ExpressRouter = Router();
 
 // Initialize services
 const authService = new AuthService();

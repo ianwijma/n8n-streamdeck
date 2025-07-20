@@ -49,6 +49,8 @@ services:
       context: .
       dockerfile: apps/frontend/Dockerfile
       target: builder
+      args:
+        NODE_ENV: development
     container_name: n8n-streamdeck-frontend-dev
     ports:
       - '3000:3000'

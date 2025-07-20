@@ -80,7 +80,13 @@ importers:
       swagger-ui-express:
         specifier: ^5.0.1
         version: 5.0.1(express@4.21.2)
+      zod:
+        specifier: ^3.22.4
+        version: 3.25.67
     devDependencies:
+      '@jest/globals':
+        specifier: ^29.7.0
+        version: 29.7.0
       '@types/bcryptjs':
         specifier: ^3.0.0
         version: 3.0.0
@@ -187,6 +193,9 @@ importers:
       '@storybook/nextjs':
         specifier: ^9.0.17
         version: 9.0.17(esbuild@0.25.7)(next@14.2.30)(react-dom@18.3.1)(react@18.3.1)(storybook@9.0.17)(typescript@5.8.3)(webpack@5.100.2)
+      '@storybook/react':
+        specifier: ^9.0.17
+        version: 9.0.17(react-dom@18.3.1)(react@18.3.1)(storybook@9.0.17)(typescript@5.8.3)
       '@testing-library/jest-dom':
         specifier: ^6.6.3
         version: 6.6.3
