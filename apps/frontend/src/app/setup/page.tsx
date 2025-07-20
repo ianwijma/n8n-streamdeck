@@ -3,14 +3,16 @@
 import { SetupWizard } from '@/components/auth/SetupWizard';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
 export default function SetupPage() {
   const { setupRequired, isAuthenticated, isLoading } = useAuth();
   const router = useRouter();
+  const [setupInProgress, setSetupInProgress] = useState(false);
 
   useEffect(() => {
-    if (!isLoading) {
+    // Don't redirect if setup is in progress to avoid race conditions
+    if (!isLoading && !setupInProgress) {
       if (!setupRequired) {
         if (isAuthenticated) {
           router.push('/');
@@ -19,7 +21,7 @@ export default function SetupPage() {
         }
       }
     }
-  }, [setupRequired, isAuthenticated, isLoading, router]);
+  }, [setupRequired, isAuthenticated, isLoading, setupInProgress, router]);
 
   if (isLoading) {
     return (
@@ -29,15 +31,21 @@ export default function SetupPage() {
     );
   }
 
-  if (!setupRequired) {
+  if (!setupRequired && !setupInProgress) {
     return null;
   }
 
   return (
     <SetupWizard
+      onSetupStart={() => setSetupInProgress(true)}
       onSuccess={() => {
-        router.push('/');
+        setSetupInProgress(false);
+        // Small delay to ensure auth state is updated
+        setTimeout(() => {
+          router.push('/');
+        }, 100);
       }}
+      onError={() => setSetupInProgress(false)}
     />
   );
 }

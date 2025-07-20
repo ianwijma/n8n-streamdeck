@@ -24,7 +24,10 @@ export class AuthController {
     body('password')
       .isLength({ min: 8 })
       .withMessage('Password must be at least 8 characters long'),
-    body('email').optional().isEmail().withMessage('Invalid email format'),
+    body('email')
+      .optional({ values: 'falsy' })
+      .isEmail()
+      .withMessage('Invalid email format'),
   ];
 
   // Login validation rules

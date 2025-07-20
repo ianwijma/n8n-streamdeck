@@ -7,9 +7,15 @@ import { SetupRequest } from '../../types/auth';
 
 interface SetupWizardProps {
   onSuccess?: () => void;
+  onSetupStart?: () => void;
+  onError?: () => void;
 }
 
-export function SetupWizard({ onSuccess }: SetupWizardProps) {
+export function SetupWizard({
+  onSuccess,
+  onSetupStart,
+  onError,
+}: SetupWizardProps) {
   const { setup, isLoading, error, clearError } = useAuth();
   const [formData, setFormData] = useState<SetupRequest>({
     username: '',
@@ -39,9 +45,11 @@ export function SetupWizard({ onSuccess }: SetupWizardProps) {
     }
 
     try {
+      onSetupStart?.();
       await setup(formData);
       onSuccess?.();
     } catch (error) {
+      onError?.();
       // Error is handled by the auth context
     }
   };

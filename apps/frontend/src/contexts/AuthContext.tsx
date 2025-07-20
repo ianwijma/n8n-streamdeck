@@ -150,7 +150,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     },
     [handleAuthError]
   );
-
   const login = useCallback(
     async (credentials: LoginRequest) => {
       try {
@@ -226,8 +225,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Initialize auth state on mount
   useEffect(() => {
-    checkSetup();
-  }, [checkSetup]);
+    const initializeAuth = async () => {
+      try {
+        dispatch({ type: 'SET_LOADING', payload: true });
+        const response = await authService.checkSetup();
+
+        if (
+          response &&
+          typeof response === 'object' &&
+          'setupRequired' in response
+        ) {
+          const { setupRequired } = response;
+          dispatch({ type: 'SET_SETUP_REQUIRED', payload: setupRequired });
+
+          if (!setupRequired) {
+            // Try to get current user profile
+            try {
+              const user = await authService.getProfile();
+              dispatch({ type: 'SET_USER', payload: user });
+            } catch (error) {
+              // User not authenticated, but setup is complete
+              dispatch({ type: 'SET_USER', payload: null });
+            }
+          }
+        } else {
+          // If response is invalid, assume setup is required
+          dispatch({ type: 'SET_SETUP_REQUIRED', payload: true });
+        }
+      } catch (error) {
+        // If setup check fails, assume setup is required
+        dispatch({ type: 'SET_SETUP_REQUIRED', payload: true });
+        handleAuthError(error);
+      }
+    };
+
+    initializeAuth();
+  }, []); // Only run once on mount
 
   // Start token refresh if user is authenticated
   useEffect(() => {
