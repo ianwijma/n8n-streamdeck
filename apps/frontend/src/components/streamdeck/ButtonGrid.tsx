@@ -18,6 +18,7 @@ import {
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { DeviceResponse, ButtonResponse } from '@/types/api';
+import Icon from '@/components/ui/Icon';
 
 interface ButtonGridProps {
   device: DeviceResponse;
@@ -94,11 +95,10 @@ const SortableButton = React.memo<SortableButtonProps>(
           <div className="w-full h-full flex flex-col items-center justify-center p-2">
             {button.icon && (
               <div className="flex-1 flex items-center justify-center mb-1">
-                <img
+                <Icon
                   src={button.icon}
                   alt={button.title || 'Button icon'}
-                  className="max-w-full max-h-full object-contain"
-                  loading="lazy"
+                  size="md"
                 />
               </div>
             )}

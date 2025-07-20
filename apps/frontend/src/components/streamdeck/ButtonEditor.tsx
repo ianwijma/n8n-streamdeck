@@ -14,6 +14,8 @@ import {
   useDeleteButton,
   useUploadButtonIcon,
 } from '@/hooks/useButtons';
+import Icon from '@/components/ui/Icon';
+import Button from '@/components/ui/Button';
 
 interface ButtonConfigForm {
   title?: string;
@@ -366,20 +368,18 @@ export default function ButtonEditor({
               <div className="flex items-center space-x-4">
                 {iconPreview && (
                   <div className="w-16 h-16 bg-gray-100 rounded-lg flex items-center justify-center">
-                    <img
-                      src={iconPreview}
-                      alt="Icon preview"
-                      className="max-w-full max-h-full object-contain"
-                    />
+                    <Icon src={iconPreview} alt="Icon preview" size="lg" />
                   </div>
                 )}
-                <button
+                <Button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="px-4 py-2 text-sm font-medium text-indigo-600 bg-indigo-50 rounded-md hover:bg-indigo-100"
+                  variant="ghost"
+                  size="sm"
+                  className="text-indigo-600 bg-indigo-50 hover:bg-indigo-100"
                 >
                   {iconPreview ? 'Change Icon' : 'Upload Icon'}
-                </button>
+                </Button>
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -577,31 +577,34 @@ export default function ButtonEditor({
           <div className="flex items-center justify-between pt-4 border-t border-gray-200">
             <div>
               {button && (
-                <button
+                <Button
                   type="button"
                   onClick={handleDelete}
-                  disabled={deleteButton.isPending}
-                  className="px-4 py-2 text-sm font-medium text-red-600 bg-red-50 rounded-md hover:bg-red-100 disabled:opacity-50"
+                  loading={deleteButton.isPending}
+                  variant="danger"
+                  size="sm"
                 >
                   {deleteButton.isPending ? 'Deleting...' : 'Delete Button'}
-                </button>
+                </Button>
               )}
             </div>
             <div className="flex space-x-3">
-              <button
+              <Button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+                variant="secondary"
+                size="sm"
               >
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
                 type="submit"
-                disabled={isSubmitting}
-                className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 disabled:opacity-50"
+                loading={isSubmitting}
+                variant="primary"
+                size="sm"
               >
                 {isSubmitting ? 'Saving...' : 'Save Button'}
-              </button>
+              </Button>
             </div>
           </div>
         </form>

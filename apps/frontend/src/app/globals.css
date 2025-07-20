@@ -25,3 +25,16 @@ body {
     text-wrap: balance;
   }
 }
+
+@layer base {
+  /* Ensure buttons have reasonable default sizing */
+  button {
+    min-height: auto;
+    line-height: normal;
+  }
+
+  /* Prevent buttons from growing too large */
+  button:not([class*='aspect-']) {
+    max-height: 3rem; /* 48px max height for most buttons */
+  }
+}

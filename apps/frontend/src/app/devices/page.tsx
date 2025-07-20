@@ -10,6 +10,7 @@ import { DeviceResponse, ButtonResponse } from '@/types/api';
 import DeviceList from '@/components/streamdeck/DeviceList';
 import ButtonGrid from '@/components/streamdeck/ButtonGrid';
 import ButtonEditor from '@/components/streamdeck/ButtonEditor';
+import Button from '@/components/ui/Button';
 
 export default function DevicesPage() {
   const { isAuthenticated, setupRequired, isLoading } = useAuth();
@@ -173,15 +174,15 @@ export default function DevicesPage() {
                   Quick Actions
                 </h3>
                 <div className="space-y-3">
-                  <button className="w-full px-4 py-2 text-sm font-medium text-indigo-600 bg-indigo-50 rounded-md hover:bg-indigo-100 transition-colors">
+                  <Button variant="primary" size="sm" className="w-full">
                     Reset All Buttons
-                  </button>
-                  <button className="w-full px-4 py-2 text-sm font-medium text-gray-700 bg-gray-50 rounded-md hover:bg-gray-100 transition-colors">
+                  </Button>
+                  <Button variant="secondary" size="sm" className="w-full">
                     Export Configuration
-                  </button>
-                  <button className="w-full px-4 py-2 text-sm font-medium text-gray-700 bg-gray-50 rounded-md hover:bg-gray-100 transition-colors">
+                  </Button>
+                  <Button variant="secondary" size="sm" className="w-full">
                     Import Configuration
-                  </button>
+                  </Button>
                 </div>
               </div>
 
