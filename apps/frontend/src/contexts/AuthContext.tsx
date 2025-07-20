@@ -52,7 +52,9 @@ function authReducer(state: AuthState, action: AuthAction): AuthState {
       return {
         ...state,
         setupRequired: action.payload,
-        isLoading: false,
+        // Only stop loading if setup is required (true)
+        // If setup is not required (false), we still need to wait for auth check
+        isLoading: action.payload ? false : state.isLoading,
       };
     case 'SET_ERROR':
       return {
@@ -110,15 +112,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         'setupRequired' in response
       ) {
         const { setupRequired } = response;
-        dispatch({ type: 'SET_SETUP_REQUIRED', payload: setupRequired });
 
-        if (!setupRequired) {
-          // Try to get current user profile
+        if (setupRequired) {
+          // Setup is required, we can stop loading
+          dispatch({ type: 'SET_SETUP_REQUIRED', payload: true });
+        } else {
+          // Setup is complete, now check authentication
           try {
             const user = await authService.getProfile();
+            // Both setup check and auth check complete - set user and stop loading
+            dispatch({ type: 'SET_SETUP_REQUIRED', payload: false });
             dispatch({ type: 'SET_USER', payload: user });
           } catch (error) {
-            // User not authenticated, but setup is complete
+            // Setup complete but user not authenticated - stop loading
+            dispatch({ type: 'SET_SETUP_REQUIRED', payload: false });
             dispatch({ type: 'SET_USER', payload: null });
           }
         }
@@ -236,15 +243,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           'setupRequired' in response
         ) {
           const { setupRequired } = response;
-          dispatch({ type: 'SET_SETUP_REQUIRED', payload: setupRequired });
 
-          if (!setupRequired) {
-            // Try to get current user profile
+          if (setupRequired) {
+            // Setup is required, we can stop loading
+            dispatch({ type: 'SET_SETUP_REQUIRED', payload: true });
+          } else {
+            // Setup is complete, now check authentication
             try {
               const user = await authService.getProfile();
+              // Both setup check and auth check complete - set user and stop loading
+              dispatch({ type: 'SET_SETUP_REQUIRED', payload: false });
               dispatch({ type: 'SET_USER', payload: user });
             } catch (error) {
-              // User not authenticated, but setup is complete
+              // Setup complete but user not authenticated - stop loading
+              dispatch({ type: 'SET_SETUP_REQUIRED', payload: false });
               dispatch({ type: 'SET_USER', payload: null });
             }
           }
