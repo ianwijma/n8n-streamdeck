@@ -259,6 +259,7 @@ export class AuthServiceDb {
 
     await this.sessionRepository.create({
       token: accessToken,
+      refreshToken: refreshToken,
       userId: user.id,
       expiresAt: sessionExpiresAt,
       ipAddress,
@@ -343,13 +344,84 @@ export class AuthServiceDb {
   }
 
   async refreshToken(refreshData: { refreshToken: string }): Promise<{
+    user: Omit<DbUser, 'password'>;
     accessToken: string;
     refreshToken: string;
     expiresAt: Date;
   }> {
-    // For now, return a simple implementation
-    // In a full implementation, you'd validate the refresh token and create new tokens
-    throw new Error('Refresh token functionality not yet implemented');
+    try {
+      // Find the session with the provided refresh token
+      const session = await this.sessionRepository.findByRefreshToken(
+        refreshData.refreshToken
+      );
+
+      if (!session) {
+        throw new Error('Invalid refresh token');
+      }
+
+      // Check if the refresh token has expired
+      if (session.expiresAt < new Date()) {
+        // Clean up expired session
+        await this.sessionRepository.delete(session.id);
+        throw new Error('Refresh token has expired');
+      }
+
+      // Get the user associated with this session
+      if (!session.userId) {
+        // Clean up session without user
+        await this.sessionRepository.delete(session.id);
+        throw new Error('Session has no associated user');
+      }
+
+      const user = await this.userRepository.findById(session.userId);
+      if (!user) {
+        // Clean up orphaned session
+        await this.sessionRepository.delete(session.id);
+        throw new Error('User not found');
+      }
+
+      // Generate new tokens
+      const newAccessToken = this.generateAccessToken(user, session.id);
+
+      const newRefreshToken = crypto.randomBytes(64).toString('hex');
+      const newExpiresAt = new Date(
+        Date.now() + this.parseTimeToMs(this.config.refreshTokenExpiresIn)
+      );
+
+      // Update the session with new refresh token and expiry
+      await this.sessionRepository.update(session.id, {
+        refreshToken: newRefreshToken,
+        expiresAt: newExpiresAt,
+        lastActivity: new Date(),
+      });
+
+      logger.info('Token refreshed successfully', {
+        category: LogCategory.SECURITY,
+        userId: user.id,
+        sessionId: session.id,
+        metadata: { username: user.username },
+      });
+
+      return {
+        user: {
+          id: user.id,
+          username: user.username,
+          email: user.email,
+          role: user.role,
+          isActive: user.isActive,
+          createdAt: user.createdAt,
+          updatedAt: user.updatedAt,
+        },
+        accessToken: newAccessToken,
+        refreshToken: newRefreshToken,
+        expiresAt: newExpiresAt,
+      };
+    } catch (error) {
+      logger.error('Token refresh failed', error as Error, {
+        category: LogCategory.SECURITY,
+      });
+      throw error;
+    }
   }
 
   async getUserSessions(userId: string): Promise<DbSession[]> {

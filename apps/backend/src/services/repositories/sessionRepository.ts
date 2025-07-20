@@ -13,6 +13,7 @@ export class SessionRepository {
   async create(data: {
     userId?: string;
     token: string;
+    refreshToken?: string;
     expiresAt: Date;
     ipAddress?: string;
     userAgent?: string;
@@ -62,6 +63,29 @@ export class SessionRepository {
     return this.prisma.session.update({
       where: { token },
       data: { expiresAt },
+    });
+  }
+
+  async findByRefreshToken(refreshToken: string): Promise<Session | null> {
+    return this.prisma.session.findUnique({
+      where: { refreshToken },
+    });
+  }
+
+  async update(
+    id: string,
+    data: {
+      refreshToken?: string;
+      expiresAt?: Date;
+      lastActivity?: Date;
+    }
+  ): Promise<Session> {
+    return this.prisma.session.update({
+      where: { id },
+      data: {
+        ...data,
+        lastAccessedAt: data.lastActivity || new Date(),
+      },
     });
   }
 }
