@@ -169,7 +169,8 @@ export class StreamDeckService extends EventEmitter {
         buttonCount: device.buttonCount,
       });
 
-      // Emit connection event
+      // Emit connection event first so other services can register
+      // The button initialization will be handled by the button controller
       const connectionEvent = createEvent<DeviceConnectedEvent>(
         EventType.DEVICE_CONNECTED,
         {
@@ -253,7 +254,7 @@ export class StreamDeckService extends EventEmitter {
   }
 
   /**
-   * Set button image on a specific device
+   * Set button image on a specific device from file path
    */
   async setButtonImage(
     deviceId: string,
@@ -300,8 +301,10 @@ export class StreamDeckService extends EventEmitter {
           }
         }
       }
-      // Set the button image
-      await streamDeck.fillKeyBuffer(buttonIndex, imageBuffer);
+      // Set the button image (specify RGB format)
+      await streamDeck.fillKeyBuffer(buttonIndex, imageBuffer, {
+        format: 'rgb',
+      });
 
       this.logger.info('Button image set successfully', {
         deviceId,
@@ -314,6 +317,105 @@ export class StreamDeckService extends EventEmitter {
         deviceId,
         buttonIndex,
         imagePath,
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Set button image on a specific device from buffer
+   */
+  async setButtonImageFromBuffer(
+    deviceId: string,
+    buttonIndex: number,
+    imageBuffer: Buffer
+  ): Promise<void> {
+    try {
+      const streamDeck = this.connectedDevices.get(deviceId);
+      if (!streamDeck) {
+        throw new Error(`Device ${deviceId} is not connected`);
+      }
+
+      const device = this.deviceInfo.get(deviceId);
+      if (!device) {
+        throw new Error(`Device ${deviceId} not found`);
+      }
+
+      if (buttonIndex < 0 || buttonIndex >= device.buttonCount) {
+        throw new Error(
+          `Button index ${buttonIndex} is out of range for device ${deviceId}`
+        );
+      }
+
+      // Get device button dimensions
+      const buttonSize = this.getButtonDimensions(device.type);
+
+      this.logger.info('Setting button image from buffer', {
+        deviceId,
+        buttonIndex,
+        bufferSize: imageBuffer.length,
+        expectedSize: buttonSize.width * buttonSize.height * 3,
+        buttonDimensions: buttonSize,
+      });
+
+      // Set the button image (specify RGB format)
+      await streamDeck.fillKeyBuffer(buttonIndex, imageBuffer, {
+        format: 'rgb',
+      });
+
+      this.logger.info('Button image set successfully from buffer', {
+        deviceId,
+        buttonIndex,
+        bufferSize: imageBuffer.length,
+      });
+    } catch (error) {
+      this.logger.error(
+        'Failed to set button image from buffer',
+        error as Error,
+        {
+          deviceId,
+          buttonIndex,
+          bufferSize: imageBuffer.length,
+        }
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Clear button (set to black)
+   */
+  async clearButton(deviceId: string, buttonIndex: number): Promise<void> {
+    try {
+      const streamDeck = this.connectedDevices.get(deviceId);
+      if (!streamDeck) {
+        throw new Error(`Device ${deviceId} is not connected`);
+      }
+
+      const device = this.deviceInfo.get(deviceId);
+      if (!device) {
+        throw new Error(`Device ${deviceId} not found`);
+      }
+
+      if (buttonIndex < 0 || buttonIndex >= device.buttonCount) {
+        throw new Error(
+          `Button index ${buttonIndex} is out of range for device ${deviceId}`
+        );
+      }
+
+      this.logger.info('Clearing button', { deviceId, buttonIndex });
+
+      // Clear the button (set to black)
+      await streamDeck.clearKey(buttonIndex);
+
+      this.logger.info('Button cleared successfully', {
+        deviceId,
+        buttonIndex,
+      });
+    } catch (error) {
+      this.logger.error('Failed to clear button', error as Error, {
+        deviceId,
+        buttonIndex,
       });
       throw error;
     }
@@ -662,6 +764,28 @@ export class StreamDeckService extends EventEmitter {
     }
 
     return 15; // Default for original StreamDeck
+  }
+
+  /**
+   * Get button dimensions for device type
+   */
+  private getButtonDimensions(deviceType: DeviceType): {
+    width: number;
+    height: number;
+  } {
+    switch (deviceType) {
+      case DeviceType.STREAMDECK_MINI:
+        return { width: 80, height: 80 };
+      case DeviceType.STREAMDECK_XL:
+        return { width: 96, height: 96 };
+      case DeviceType.STREAMDECK_PLUS:
+        return { width: 120, height: 120 };
+      case DeviceType.STREAMDECK_MK2:
+        return { width: 72, height: 72 };
+      case DeviceType.STREAMDECK_ORIGINAL:
+      default:
+        return { width: 72, height: 72 };
+    }
   }
 
   // Singleton pattern for testing

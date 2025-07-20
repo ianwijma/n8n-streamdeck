@@ -12,6 +12,7 @@ import {
 } from '@n8n-streamdeck/shared';
 import { StreamDeckService } from '../services/streamDeckService';
 import { WebhookService } from '../services/webhookService';
+import { ButtonImageService } from '../services/buttonImageService';
 import { config } from '../config/environment';
 
 const logger = new Logger({ level: config.logLevel }, 'ButtonController');
@@ -23,10 +24,12 @@ const buttonStorage = new Map<string, Button[]>();
 export class ButtonController {
   private streamDeckService: StreamDeckService;
   private webhookService: WebhookService;
+  private imageService: ButtonImageService;
 
   constructor(streamDeckService: StreamDeckService) {
     this.streamDeckService = streamDeckService;
     this.webhookService = WebhookService.getInstance();
+    this.imageService = ButtonImageService.getInstance();
   }
 
   /**
@@ -252,6 +255,9 @@ export class ButtonController {
       // Sort buttons by index
       buttons.sort((a, b) => a.index - b.index);
 
+      // Update physical device
+      await this.updatePhysicalButton(deviceId, button!);
+
       const response = createSuccessResponse(
         this.transformButtonToResponse(button!),
         isNewButton
@@ -362,6 +368,9 @@ export class ButtonController {
       if (fontSize !== undefined) button.fontSize = fontSize;
       if (enabled !== undefined) button.isEnabled = enabled;
       button.updatedAt = new Date();
+
+      // Update physical device
+      await this.updatePhysicalButton(deviceId, button);
 
       const response = createSuccessResponse(
         this.transformButtonToResponse(button),
@@ -876,5 +885,93 @@ export class ButtonController {
       message: 'Command executed',
       command: action.command,
     };
+  }
+
+  /**
+   * Update the physical StreamDeck device with button configuration
+   */
+  private async updatePhysicalButton(
+    deviceId: string,
+    button: Button
+  ): Promise<void> {
+    try {
+      // Check if device is connected
+      if (!this.streamDeckService.isDeviceConnected(deviceId)) {
+        logger.warn('Device not connected, skipping physical update', {
+          deviceId,
+          buttonIndex: button.index,
+        });
+        return;
+      }
+
+      logger.info('Updating physical button', {
+        deviceId,
+        buttonIndex: button.index,
+        title: button.label,
+        backgroundColor: button.backgroundColor,
+      });
+
+      // Get device info to determine button dimensions
+      const device = this.streamDeckService.getDevice(deviceId);
+      if (!device) {
+        throw new Error(`Device ${deviceId} not found`);
+      }
+
+      // Get button dimensions based on device type
+      const buttonDimensions = this.getButtonDimensions(device.type);
+
+      // Generate button image from configuration
+      const imageBuffer = await this.imageService.generateButtonImage({
+        title: button.label,
+        backgroundColor: button.backgroundColor || '#000000',
+        textColor: button.textColor || '#ffffff',
+        fontSize: button.fontSize || 12,
+        icon: button.icon,
+        width: buttonDimensions.width,
+        height: buttonDimensions.height,
+      });
+
+      // Update the physical device
+      await this.streamDeckService.setButtonImageFromBuffer(
+        deviceId,
+        button.index,
+        imageBuffer
+      );
+
+      logger.info('Physical button updated successfully', {
+        deviceId,
+        buttonIndex: button.index,
+        title: button.label,
+      });
+    } catch (error) {
+      logger.error('Failed to update physical button', error as Error, {
+        deviceId,
+        buttonIndex: button.index,
+        title: button.label,
+      });
+      // Don't throw the error - we don't want to fail the API call if physical update fails
+    }
+  }
+
+  /**
+   * Get button dimensions for device type
+   */
+  private getButtonDimensions(deviceType: string): {
+    width: number;
+    height: number;
+  } {
+    switch (deviceType) {
+      case 'streamdeck-mini':
+        return { width: 80, height: 80 };
+      case 'streamdeck-xl':
+        return { width: 96, height: 96 };
+      case 'streamdeck-plus':
+        return { width: 120, height: 120 };
+      case 'streamdeck-mk2':
+        return { width: 72, height: 72 };
+      case 'streamdeck-original':
+      default:
+        return { width: 72, height: 72 };
+    }
   }
 }
