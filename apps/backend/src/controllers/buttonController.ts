@@ -87,9 +87,13 @@ export class ButtonController {
       const endIndex = startIndex + limitNum;
       const paginatedButtons = buttons.slice(startIndex, endIndex);
 
+      const transformedButtons = paginatedButtons.map((button) =>
+        this.transformButtonToResponse(button)
+      );
+
       const response = createSuccessResponse(
-        paginatedButtons,
-        `Found ${paginatedButtons.length} buttons for device`,
+        transformedButtons,
+        `Found ${transformedButtons.length} buttons for device`,
         req.requestId
       );
 
@@ -249,7 +253,7 @@ export class ButtonController {
       buttons.sort((a, b) => a.index - b.index);
 
       const response = createSuccessResponse(
-        button,
+        this.transformButtonToResponse(button!),
         isNewButton
           ? 'Button created successfully'
           : 'Button updated successfully',
@@ -360,7 +364,7 @@ export class ButtonController {
       button.updatedAt = new Date();
 
       const response = createSuccessResponse(
-        button,
+        this.transformButtonToResponse(button),
         'Button updated successfully',
         req.requestId
       );
@@ -454,7 +458,7 @@ export class ButtonController {
       }
 
       const response = createSuccessResponse(
-        button,
+        this.transformButtonToResponse(button),
         'Button found',
         req.requestId
       );
@@ -553,7 +557,7 @@ export class ButtonController {
       buttons[buttonIndex] = defaultButton;
 
       const response = createSuccessResponse(
-        defaultButton,
+        this.transformButtonToResponse(defaultButton),
         'Button reset to default successfully',
         req.requestId
       );
@@ -760,6 +764,26 @@ export class ButtonController {
       fontSize: 12,
       createdAt: new Date(),
       updatedAt: new Date(),
+    };
+  }
+
+  /**
+   * Transform internal button format to API response format
+   */
+  private transformButtonToResponse(button: Button): any {
+    return {
+      id: button.id,
+      deviceId: button.deviceId,
+      position: button.index,
+      title: button.label,
+      icon: button.icon,
+      backgroundColor: button.backgroundColor,
+      textColor: button.textColor,
+      fontSize: button.fontSize,
+      action: button.action,
+      enabled: button.isEnabled,
+      createdAt: button.createdAt.toISOString(),
+      updatedAt: button.updatedAt.toISOString(),
     };
   }
 

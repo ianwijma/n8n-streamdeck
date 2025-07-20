@@ -26,6 +26,7 @@ interface ButtonGridProps {
   isLoading?: boolean;
   error?: Error | null;
   pressedButtons?: Set<number>;
+  recentlyModifiedButtons?: Set<number>;
   onButtonClick?: (button: ButtonResponse | null, position: number) => void;
   onButtonReorder?: (
     oldIndex: number,
@@ -40,11 +41,18 @@ interface SortableButtonProps {
   button: ButtonResponse | null;
   position: number;
   isPressed?: boolean;
+  isRecentlyModified?: boolean;
   onClick?: () => void;
 }
 
 const SortableButton = React.memo<SortableButtonProps>(
-  ({ button, position, isPressed = false, onClick }) => {
+  ({
+    button,
+    position,
+    isPressed = false,
+    isRecentlyModified = false,
+    onClick,
+  }) => {
     const {
       attributes,
       listeners,
@@ -61,14 +69,14 @@ const SortableButton = React.memo<SortableButtonProps>(
 
     const buttonClassName = useMemo(
       () => `
-    group relative aspect-square bg-gray-800 rounded-lg border border-gray-600
-    cursor-pointer transition-all duration-150 hover:border-gray-400
+    group relative aspect-square bg-gray-800 rounded-lg border transition-all duration-150 cursor-pointer
     ${isPressed ? 'scale-95 border-blue-400 shadow-lg shadow-blue-500/50' : ''}
+    ${isRecentlyModified ? 'border-green-400 shadow-lg shadow-green-500/30 animate-pulse' : 'border-gray-600 hover:border-gray-400'}
     ${isDragging ? 'opacity-50' : ''}
     ${button ? 'hover:shadow-lg hover:bg-gray-700' : 'hover:bg-gray-700'}
     w-16 h-16 min-w-[4rem] min-h-[4rem]
   `,
-      [isPressed, isDragging, button]
+      [isPressed, isRecentlyModified, isDragging, button]
     );
 
     const handleClick = useCallback(
@@ -176,6 +184,11 @@ const SortableButton = React.memo<SortableButtonProps>(
         <div className="absolute top-0.5 left-0.5 text-[10px] text-gray-500 font-mono bg-gray-900/80 rounded px-1 pointer-events-none">
           {position + 1}
         </div>
+
+        {/* Recently modified indicator */}
+        {isRecentlyModified && (
+          <div className="absolute top-0.5 right-0.5 w-2 h-2 bg-green-400 rounded-full animate-pulse pointer-events-none" />
+        )}
       </div>
     );
   }
@@ -190,6 +203,7 @@ const ButtonGrid = React.memo<ButtonGridProps>(
     isLoading = false,
     error = null,
     pressedButtons = new Set(),
+    recentlyModifiedButtons = new Set(),
     onButtonClick,
     onButtonReorder,
     className = '',
@@ -384,6 +398,7 @@ const ButtonGrid = React.memo<ButtonGridProps>(
                       button={button}
                       position={index}
                       isPressed={pressedButtons.has(index)}
+                      isRecentlyModified={recentlyModifiedButtons.has(index)}
                       onClick={() => handleButtonClick(index)}
                     />
                   ))}

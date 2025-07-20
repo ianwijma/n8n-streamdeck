@@ -1,9 +1,9 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import { useDevices } from '@/hooks/useDevices';
 import { ButtonResponse } from '@/types/api';
 import ButtonGridContainer from '@/components/streamdeck/ButtonGridContainer';
@@ -15,10 +15,32 @@ export default function DevicePage() {
   const { isAuthenticated, setupRequired, isLoading } = useAuth();
   const router = useRouter();
   const params = useParams();
+  const searchParams = useSearchParams();
   const deviceId = params?.deviceId as string;
+
+  const [recentlyModifiedPosition, setRecentlyModifiedPosition] = useState<
+    number | undefined
+  >();
 
   const { data: devices, isLoading: devicesLoading } = useDevices();
   const device = devices?.find((d) => d.id === deviceId);
+
+  // Check if we're returning from button configuration
+  useEffect(() => {
+    if (searchParams) {
+      const modifiedPosition = searchParams.get('modified');
+      if (modifiedPosition !== null) {
+        const position = parseInt(modifiedPosition, 10);
+        if (!isNaN(position)) {
+          setRecentlyModifiedPosition(position);
+          // Clear the URL parameter
+          const newUrl = new URL(window.location.href);
+          newUrl.searchParams.delete('modified');
+          window.history.replaceState({}, '', newUrl.toString());
+        }
+      }
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     if (!isLoading) {
@@ -124,6 +146,7 @@ export default function DevicePage() {
           <ButtonGridContainer
             device={device}
             onButtonClick={handleButtonClick}
+            recentlyModifiedPosition={recentlyModifiedPosition}
           />
         </div>
 

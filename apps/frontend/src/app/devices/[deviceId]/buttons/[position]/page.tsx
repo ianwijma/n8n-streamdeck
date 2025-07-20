@@ -25,7 +25,7 @@ export default function ButtonConfigurationPage() {
   };
 
   const handleSave = (savedButton: ButtonResponse) => {
-    router.push(`/devices/${deviceId}`);
+    router.push(`/devices/${deviceId}?modified=${position}`);
   };
 
   if (devicesLoading || buttonsLoading) {
