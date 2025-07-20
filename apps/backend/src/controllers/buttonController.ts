@@ -55,10 +55,21 @@ export class ButtonController {
       logger.info('Device connected, initializing buttons', { deviceId });
 
       // Ensure device exists in database
-      await this.ensureDeviceInDatabase(deviceId);
+      const actualDeviceId = await this.ensureDeviceInDatabase(deviceId);
+      if (!actualDeviceId) {
+        logger.error(
+          'Failed to ensure device exists in database',
+          new Error('Device not found'),
+          {
+            deviceId,
+          }
+        );
+        return;
+      }
 
       // Get current button configurations for this device from database
-      const buttons = await this.buttonRepository.findByDeviceId(deviceId);
+      const buttons =
+        await this.buttonRepository.findByDeviceId(actualDeviceId);
       if (buttons && buttons.length > 0) {
         // Convert database buttons to shared Button format
         const sharedButtons = buttons.map((button) =>
@@ -79,18 +90,20 @@ export class ButtonController {
   /**
    * Ensure device exists in database, create if missing
    */
-  private async ensureDeviceInDatabase(deviceId: string): Promise<boolean> {
+  private async ensureDeviceInDatabase(
+    deviceId: string
+  ): Promise<string | null> {
     try {
       // Get device from StreamDeckService first
       const memoryDevice = this.streamDeckService.getDevice(deviceId);
       if (!memoryDevice) {
-        return false;
+        return null;
       }
 
       const serialNumber = memoryDevice.serialNumber || deviceId;
 
       // Use upsert to handle existing devices gracefully
-      await this.deviceRepository.upsert({
+      const device = await this.deviceRepository.upsert({
         id: deviceId,
         name: memoryDevice.name,
         type: this.mapDeviceType(memoryDevice.type),
@@ -103,13 +116,14 @@ export class ButtonController {
       logger.info('Ensured device exists in database', {
         deviceId,
         serialNumber,
+        actualDeviceId: device.id,
       });
-      return true;
+      return device.id;
     } catch (error) {
       logger.error('Failed to ensure device in database', error as Error, {
         deviceId,
       });
-      return false;
+      return null;
     }
   }
 
@@ -200,8 +214,8 @@ export class ButtonController {
       }
 
       // Ensure device exists in database
-      const deviceInDb = await this.ensureDeviceInDatabase(deviceId);
-      if (!deviceInDb) {
+      const actualDeviceId = await this.ensureDeviceInDatabase(deviceId);
+      if (!actualDeviceId) {
         const errorResponse = createErrorResponse(
           {
             code: ApiErrorCode.INTERNAL_ERROR,
@@ -214,10 +228,10 @@ export class ButtonController {
       }
 
       // Get buttons for device or create default ones
-      let buttons = await this.buttonRepository.findByDeviceId(deviceId);
+      let buttons = await this.buttonRepository.findByDeviceId(actualDeviceId);
       if (!buttons || buttons.length === 0) {
         buttons = await this.buttonRepository.createDefaultButtons(
-          deviceId,
+          actualDeviceId,
           device.buttonCount
         );
       }
@@ -335,8 +349,8 @@ export class ButtonController {
       }
 
       // Ensure device exists in database
-      const deviceInDb = await this.ensureDeviceInDatabase(deviceId);
-      if (!deviceInDb) {
+      const actualDeviceId = await this.ensureDeviceInDatabase(deviceId);
+      if (!actualDeviceId) {
         const errorResponse = createErrorResponse(
           {
             code: ApiErrorCode.INTERNAL_ERROR,
@@ -376,7 +390,7 @@ export class ButtonController {
 
       // Find existing button or create new one
       let button = await this.buttonRepository.findByDeviceAndIndex(
-        deviceId,
+        actualDeviceId,
         position
       );
       const isNewButton = !button;
@@ -384,7 +398,7 @@ export class ButtonController {
       if (isNewButton) {
         // Create new button in database
         button = await this.buttonRepository.create({
-          deviceId,
+          deviceId: actualDeviceId,
           index: position,
           label: title,
           icon,
@@ -509,7 +523,18 @@ export class ButtonController {
       }
 
       // Ensure device exists in database
-      await this.ensureDeviceInDatabase(deviceId);
+      const actualDeviceId = await this.ensureDeviceInDatabase(deviceId);
+      if (!actualDeviceId) {
+        const errorResponse = createErrorResponse(
+          {
+            code: ApiErrorCode.INTERNAL_ERROR,
+            message: 'Failed to register device in database',
+          },
+          req.requestId
+        );
+        res.status(HttpStatusCode.INTERNAL_SERVER_ERROR).json(errorResponse);
+        return;
+      }
 
       // Find button in database
       const button = await this.buttonRepository.findById(buttonId);
