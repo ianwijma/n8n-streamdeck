@@ -43,10 +43,10 @@ export class ButtonController {
    */
   private async handleDeviceConnected(event: any): Promise<void> {
     try {
-      const deviceId = event.data.device?.id || event.data.device?.deviceId;
+      const deviceId = event.device?.id || event.device?.deviceId;
       if (!deviceId) {
         logger.warn('Device connected event missing device ID', {
-          event: event.data,
+          event,
         });
         return;
       }
