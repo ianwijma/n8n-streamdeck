@@ -118,6 +118,43 @@ services:
       timeout: 10s
       retries: 3
 
+  # N8N with StreamDeck custom node
+  n8n:
+    build:
+      context: .
+      dockerfile: docker/n8n/Dockerfile
+    container_name: n8n-streamdeck-n8n-dev
+    ports:
+      - '5678:5678'
+    environment:
+      - NODE_ENV=development
+      - N8N_BASIC_AUTH_ACTIVE=false
+      - N8N_HOST=0.0.0.0
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - WEBHOOK_URL=http://localhost:5678
+      - N8N_LOG_LEVEL=debug
+      - N8N_USER_FOLDER=/home/node/.n8n
+      - N8N_CUSTOM_EXTENSIONS=/home/node/.n8n/nodes
+      # StreamDeck API connection
+      - STREAMDECK_API_URL=http://backend:3001
+      - STREAMDECK_API_KEY=${STREAMDECK_API_KEY:-dev-api-key}
+    volumes:
+      - n8n-data:/home/node/.n8n
+      - n8n-logs:/home/node/.n8n/logs
+    networks:
+      - n8n-streamdeck-dev
+    depends_on:
+      - backend
+      - postgres
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:5678/healthz']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
   # Development tools container
   devtools:
     image: node:22-alpine
@@ -192,6 +229,10 @@ volumes:
     name: n8n-streamdeck-redis-data-dev
   postgres-data:
     name: n8n-streamdeck-postgres-data-dev
+  n8n-data:
+    name: n8n-streamdeck-n8n-data-dev
+  n8n-logs:
+    name: n8n-streamdeck-n8n-logs-dev
   devtools-cache:
     name: n8n-streamdeck-devtools-cache-dev
   prometheus-data:
