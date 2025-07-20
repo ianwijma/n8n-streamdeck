@@ -42,19 +42,109 @@ class PortManager {
   }
 
   /**
-   * Check if a port is in use
+   * Check if a port is in use using multiple methods
    */
   async isPortInUse(port) {
+    // Method 1: lsof
     try {
-      const result = execSync(`lsof -ti:${port}`, {
+      const lsofResult = execSync(`lsof -ti:${port}`, {
         encoding: 'utf8',
         stdio: 'pipe',
       });
-      return result.trim().length > 0;
+      if (lsofResult.trim().length > 0) {
+        return true;
+      }
     } catch (error) {
       // lsof returns non-zero exit code when no processes found
-      return false;
     }
+
+    // Method 2: netstat (more reliable for some cases)
+    try {
+      const netstatResult = execSync(`netstat -tlnp | grep :${port}`, {
+        encoding: 'utf8',
+        stdio: 'pipe',
+      });
+      if (netstatResult.trim().length > 0) {
+        return true;
+      }
+    } catch (error) {
+      // netstat returns non-zero exit code when no matches found
+    }
+
+    // Method 3: ss command (modern alternative)
+    try {
+      const ssResult = execSync(`ss -tlnp | grep :${port}`, {
+        encoding: 'utf8',
+        stdio: 'pipe',
+      });
+      if (ssResult.trim().length > 0) {
+        return true;
+      }
+    } catch (error) {
+      // ss returns non-zero exit code when no matches found
+    }
+
+    return false;
+  }
+
+  /**
+   * Get all PIDs using a specific port
+   */
+  getPortPids(port) {
+    const allPids = new Set();
+
+    // Method 1: lsof
+    try {
+      const lsofResult = execSync(`lsof -ti:${port}`, {
+        encoding: 'utf8',
+        stdio: 'pipe',
+      }).trim();
+      if (lsofResult) {
+        lsofResult.split('\n').forEach((pid) => {
+          if (pid.trim()) allPids.add(pid.trim());
+        });
+      }
+    } catch (error) {
+      // lsof failed, continue with other methods
+    }
+
+    // Method 2: netstat + extract PID
+    try {
+      const netstatResult = execSync(`netstat -tlnp | grep :${port}`, {
+        encoding: 'utf8',
+        stdio: 'pipe',
+      }).trim();
+      if (netstatResult) {
+        const lines = netstatResult.split('\n');
+        for (const line of lines) {
+          const match = line.match(/(\d+)\/\w+\s*$/);
+          if (match && match[1]) {
+            allPids.add(match[1]);
+          }
+        }
+      }
+    } catch (error) {
+      // netstat failed, continue
+    }
+
+    // Method 3: fuser (if available)
+    try {
+      const fuserResult = execSync(`fuser ${port}/tcp 2>/dev/null`, {
+        encoding: 'utf8',
+        stdio: 'pipe',
+      }).trim();
+      if (fuserResult) {
+        fuserResult.split(/\s+/).forEach((pid) => {
+          if (pid.trim() && /^\d+$/.test(pid.trim())) {
+            allPids.add(pid.trim());
+          }
+        });
+      }
+    } catch (error) {
+      // fuser failed or not available, continue
+    }
+
+    return Array.from(allPids);
   }
 
   /**
@@ -63,21 +153,32 @@ class PortManager {
   async killPort(port) {
     try {
       console.log(`🔍 Checking for processes on port ${port}...`);
-      const pids = execSync(`lsof -ti:${port}`, {
-        encoding: 'utf8',
-        stdio: 'pipe',
-      }).trim();
+      const pidList = this.getPortPids(port);
 
-      if (pids) {
-        const pidList = pids.split('\n').filter((pid) => pid.trim());
+      if (pidList.length > 0) {
         console.log(
           `💀 Killing ${pidList.length} process(es) on port ${port}: ${pidList.join(', ')}`
         );
 
         for (const pid of pidList) {
           try {
-            execSync(`kill -9 ${pid.trim()}`, { stdio: 'pipe' });
-            console.log(`✅ Killed process ${pid}`);
+            // Try graceful kill first
+            execSync(`kill -TERM ${pid}`, { stdio: 'pipe' });
+            console.log(`📋 Sent SIGTERM to process ${pid}`);
+          } catch (error) {
+            console.log(`⚠️  Could not send SIGTERM to process ${pid}`);
+          }
+        }
+
+        // Wait a moment for graceful shutdown
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+
+        // Force kill any remaining processes
+        const remainingPids = this.getPortPids(port);
+        for (const pid of remainingPids) {
+          try {
+            execSync(`kill -9 ${pid}`, { stdio: 'pipe' });
+            console.log(`💀 Force killed process ${pid}`);
           } catch (error) {
             console.log(`⚠️  Process ${pid} may have already exited`);
           }
