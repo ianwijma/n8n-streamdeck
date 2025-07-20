@@ -4,6 +4,7 @@ import { config } from './config/environment';
 import { createApp } from './app';
 import { StreamDeckService } from './services/streamDeckService';
 import { WebSocketService } from './services/websocketService';
+import { databaseService } from './services/databaseService';
 
 const logger = new Logger({ level: config.logLevel }, 'Server');
 
@@ -11,6 +12,18 @@ let server: Server;
 
 const startServer = async (): Promise<void> => {
   try {
+    // Initialize database connection
+    logger.info('Initializing database connection...');
+    await databaseService.connect();
+    await databaseService.runMigrations();
+
+    // Perform health check
+    const isHealthy = await databaseService.healthCheck();
+    if (!isHealthy) {
+      throw new Error('Database health check failed');
+    }
+    logger.info('Database initialized successfully');
+
     // Create Express application
     const app = createApp();
 
@@ -108,6 +121,9 @@ const gracefulShutdown = async (signal: string): Promise<void> => {
     // Shutdown StreamDeck service
     const streamDeckService = StreamDeckService.getInstance();
     await streamDeckService.shutdown();
+
+    // Shutdown database connection
+    await databaseService.cleanup();
 
     if (server) {
       server.close((error) => {

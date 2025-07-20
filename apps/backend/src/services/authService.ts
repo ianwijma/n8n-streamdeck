@@ -19,10 +19,12 @@ import {
   SecurityEventType,
   AuthConfig,
 } from '../types/auth';
+import { UserRepository, SessionRepository } from './repositories';
+import { databaseService } from './databaseService';
 
 export class AuthService {
-  private users: Map<string, User> = new Map();
-  private sessions: Map<string, Session> = new Map();
+  private userRepository: UserRepository;
+  private sessionRepository: SessionRepository;
   private refreshTokens: Map<string, RefreshToken> = new Map();
   private loginAttempts: LoginAttempt[] = [];
   private securityEvents: SecurityEvent[] = [];
@@ -67,15 +69,17 @@ export class AuthService {
   ]);
 
   constructor() {
-    this.initializeDefaultUser();
+    this.userRepository = new UserRepository();
+    this.sessionRepository = new SessionRepository();
+    this.initializeSetupState();
   }
 
-  private initializeDefaultUser(): void {
-    // Check if setup is needed (no users exist)
-    if (this.users.size === 0) {
+  private async initializeSetupState(): Promise<void> {
+    try {
+      const users = await this.userRepository.findAll(false);
+      this.isSetupComplete = users.length > 0;
+    } catch (error) {
       this.isSetupComplete = false;
-    } else {
-      this.isSetupComplete = true;
     }
   }
 

@@ -1,0 +1,148 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum DeviceType {
+  STREAMDECK_ORIGINAL
+  STREAMDECK_MINI
+  STREAMDECK_XL
+  STREAMDECK_MK2
+  STREAMDECK_PLUS
+}
+
+enum ButtonActionType {
+  TRIGGER_WORKFLOW
+  WEBHOOK
+  HOTKEY
+  COMMAND
+  FOLDER
+  BACK
+  NONE
+}
+
+model Device {
+  id              String      @id @default(cuid())
+  name            String
+  type            DeviceType
+  serialNumber    String      @unique
+  buttonCount     Int
+  isConnected     Boolean     @default(false)
+  firmwareVersion String?
+  brightness      Int?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  // Relations
+  buttons         Button[]
+  folders         Folder[]
+  profiles        DeviceProfile[]
+
+  @@map("devices")
+}
+
+model Button {
+  id              String            @id @default(cuid())
+  deviceId        String
+  index           Int
+  label           String?
+  icon            String?
+  iconData        Bytes?
+  actionType      ButtonActionType?
+  actionPayload   String?           // JSON string
+  n8nWorkflowId   String?
+  webhookUrl      String?
+  command         String?
+  hotkey          String?           // JSON array as string
+  isEnabled       Boolean           @default(true)
+  backgroundColor String?
+  textColor       String?
+  fontSize        Int?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  // Relations
+  device          Device            @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  folders         FolderButton[]
+
+  @@unique([deviceId, index])
+  @@map("buttons")
+}
+
+model Folder {
+  id              String         @id @default(cuid())
+  name            String
+  deviceId        String
+  parentId        String?
+  icon            String?
+  backgroundColor String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  // Relations
+  device          Device         @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  parent          Folder?        @relation("FolderHierarchy", fields: [parentId], references: [id])
+  children        Folder[]       @relation("FolderHierarchy")
+  buttons         FolderButton[]
+  profiles        DeviceProfile[]
+
+  @@map("folders")
+}
+
+model FolderButton {
+  id       String @id @default(cuid())
+  folderId String
+  buttonId String
+
+  // Relations
+  folder   Folder @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  button   Button @relation(fields: [buttonId], references: [id], onDelete: Cascade)
+
+  @@unique([folderId, buttonId])
+  @@map("folder_buttons")
+}
+
+model DeviceProfile {
+  id        String   @id @default(cuid())
+  name      String
+  deviceId  String
+  isActive  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  device    Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  folders   Folder[]
+
+  @@map("device_profiles")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  username  String   @unique
+  email     String?  @unique
+  password  String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("users")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String?
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@map("sessions")
+}
