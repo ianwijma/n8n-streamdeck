@@ -108,4 +108,41 @@ export class DeviceRepository {
       },
     });
   }
+
+  async upsert(data: {
+    id?: string;
+    name: string;
+    type: DeviceType;
+    serialNumber: string;
+    buttonCount: number;
+    firmwareVersion?: string;
+    brightness?: number;
+  }): Promise<Device> {
+    return this.prisma.device.upsert({
+      where: { serialNumber: data.serialNumber },
+      update: {
+        name: data.name,
+        type: data.type,
+        buttonCount: data.buttonCount,
+        firmwareVersion: data.firmwareVersion,
+        brightness: data.brightness,
+        isConnected: true,
+      },
+      create: {
+        ...(data.id && { id: data.id }),
+        name: data.name,
+        type: data.type,
+        serialNumber: data.serialNumber,
+        buttonCount: data.buttonCount,
+        firmwareVersion: data.firmwareVersion,
+        brightness: data.brightness,
+        isConnected: true,
+      },
+      include: {
+        buttons: true,
+        folders: true,
+        profiles: true,
+      },
+    });
+  }
 }

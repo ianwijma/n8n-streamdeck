@@ -81,29 +81,29 @@ export class ButtonController {
    */
   private async ensureDeviceInDatabase(deviceId: string): Promise<boolean> {
     try {
-      // Check if device exists in database
-      let dbDevice = await this.deviceRepository.findById(deviceId);
-      if (dbDevice) {
-        return true;
-      }
-
-      // Device not in database, get from StreamDeckService
+      // Get device from StreamDeckService first
       const memoryDevice = this.streamDeckService.getDevice(deviceId);
       if (!memoryDevice) {
         return false;
       }
 
-      // Create device in database
-      await this.deviceRepository.create({
+      const serialNumber = memoryDevice.serialNumber || deviceId;
+
+      // Use upsert to handle existing devices gracefully
+      await this.deviceRepository.upsert({
+        id: deviceId,
         name: memoryDevice.name,
         type: this.mapDeviceType(memoryDevice.type),
-        serialNumber: memoryDevice.serialNumber || deviceId,
+        serialNumber,
         buttonCount: memoryDevice.buttonCount,
         firmwareVersion: memoryDevice.firmwareVersion,
         brightness: memoryDevice.brightness,
       });
 
-      logger.info('Created device in database', { deviceId });
+      logger.info('Ensured device exists in database', {
+        deviceId,
+        serialNumber,
+      });
       return true;
     } catch (error) {
       logger.error('Failed to ensure device in database', error as Error, {
