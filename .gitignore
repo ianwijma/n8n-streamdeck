@@ -118,3 +118,6 @@ PERFORMANCE.md
 
 # Compressed files
 *.gz
+
+# Database files
+*.db
