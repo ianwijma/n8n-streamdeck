@@ -1,0 +1,98 @@
+services:
+  # N8N with StreamDeck custom node
+  n8n:
+    build:
+      context: .
+      dockerfile: docker/n8n/Dockerfile
+    container_name: n8n-streamdeck-n8n
+    ports:
+      - '5678:5678'
+    environment:
+      - NODE_ENV=development
+      - N8N_BASIC_AUTH_ACTIVE=false
+      - N8N_HOST=0.0.0.0
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - WEBHOOK_URL=http://localhost:5678
+      - N8N_LOG_LEVEL=debug
+      - N8N_USER_FOLDER=/home/node/.n8n
+      - N8N_CUSTOM_EXTENSIONS=/home/node/.n8n/custom
+      # StreamDeck API connection (host machine)
+      - STREAMDECK_API_URL=http://host.docker.internal:3001
+      - STREAMDECK_API_KEY=${STREAMDECK_API_KEY:-dev-api-key}
+      # Database connection
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=postgres
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_DATABASE=n8n_dev
+      - DB_POSTGRESDB_USER=n8n_user
+      - DB_POSTGRESDB_PASSWORD=n8n_password
+    volumes:
+      - n8n-data:/home/node/.n8n
+      - n8n-logs:/home/node/.n8n/logs
+    networks:
+      - n8n-network
+    depends_on:
+      - postgres
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:5678/healthz']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # PostgreSQL for N8N workflows and data
+  postgres:
+    image: postgres:15-alpine
+    container_name: n8n-streamdeck-postgres
+    ports:
+      - '5432:5432'
+    environment:
+      - POSTGRES_DB=n8n_dev
+      - POSTGRES_USER=n8n_user
+      - POSTGRES_PASSWORD=n8n_password
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - n8n-network
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U n8n_user -d n8n_dev']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Redis for N8N caching and queue management
+  redis:
+    image: redis:7-alpine
+    container_name: n8n-streamdeck-redis
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    networks:
+      - n8n-network
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  n8n-network:
+    driver: bridge
+    name: n8n-streamdeck-network
+
+volumes:
+  n8n-data:
+    name: n8n-streamdeck-data
+  n8n-logs:
+    name: n8n-streamdeck-logs
+  postgres-data:
+    name: n8n-streamdeck-postgres-data
+  redis-data:
+    name: n8n-streamdeck-redis-data

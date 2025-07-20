@@ -1,0 +1,36 @@
+{
+  "name": "@n8n-streamdeck/n8n-node",
+  "version": "1.0.0",
+  "description": "N8N custom node for StreamDeck integration - trigger workflows from StreamDeck buttons",
+  "main": "dist/index.js",
+  "license": "MIT",
+  "author": "StreamDeck N8N Integration",
+  "keywords": [
+    "n8n-community-node-package",
+    "streamdeck",
+    "trigger",
+    "automation",
+    "workflow"
+  ],
+  "files": [
+    "dist"
+  ],
+  "n8n": {
+    "n8nNodesApiVersion": 1,
+    "credentials": [
+      "dist/apps/n8n-node/src/credentials/StreamDeckApi.credentials.js"
+    ],
+    "nodes": [
+      "dist/apps/n8n-node/src/nodes/StreamDeckTrigger/StreamDeckTrigger.node.js"
+    ]
+  },
+  "dependencies": {
+    "n8n-workflow": "^1.32.0",
+    "n8n-core": "^1.32.0",
+    "axios": "^1.6.7",
+    "ws": "^8.16.0"
+  },
+  "peerDependencies": {
+    "n8n-workflow": "*"
+  }
+}

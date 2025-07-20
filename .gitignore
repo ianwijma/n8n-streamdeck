@@ -106,8 +106,10 @@ Thumbs.db
 /apps/frontend/storybook-static/
 
 # Deployment files
-docker-compose*.yml
-Dockerfile*
+docker-compose.prod.yml
+docker-compose.staging.yml
+docker-compose.override.yml
+Dockerfile.prod
 nginx/
 scripts/deploy.sh
 scripts/backup.sh
