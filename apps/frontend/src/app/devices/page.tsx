@@ -1,6 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
+import { useRouter } from 'next/navigation';
 
 // Disable static generation for this page
 export const dynamic = 'force-dynamic';
@@ -10,6 +12,30 @@ import ButtonGrid from '@/components/streamdeck/ButtonGrid';
 import ButtonEditor from '@/components/streamdeck/ButtonEditor';
 
 export default function DevicesPage() {
+  const { isAuthenticated, setupRequired, isLoading } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!isLoading) {
+      if (setupRequired) {
+        router.push('/setup');
+      } else if (!isAuthenticated) {
+        router.push('/login');
+      }
+    }
+  }, [isAuthenticated, setupRequired, isLoading, router]);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-indigo-600"></div>
+      </div>
+    );
+  }
+
+  if (setupRequired || !isAuthenticated) {
+    return null;
+  }
   const [selectedDevice, setSelectedDevice] = useState<DeviceResponse | null>(
     null
   );

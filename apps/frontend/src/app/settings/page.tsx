@@ -1,7 +1,42 @@
+'use client';
+
+import { useAuth } from '@/contexts/AuthContext';
+import { useRouter } from 'next/navigation';
+import { useEffect } from 'react';
+
 // Disable static generation for this page
 export const dynamic = 'force-dynamic';
 
 export default function SettingsPage() {
+  const { isAuthenticated, setupRequired, isLoading, logout } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!isLoading) {
+      if (setupRequired) {
+        router.push('/setup');
+      } else if (!isAuthenticated) {
+        router.push('/login');
+      }
+    }
+  }, [isAuthenticated, setupRequired, isLoading, router]);
+
+  const handleLogout = async () => {
+    await logout();
+    router.push('/login');
+  };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-indigo-600"></div>
+      </div>
+    );
+  }
+
+  if (setupRequired || !isAuthenticated) {
+    return null;
+  }
   return (
     <div>
       <div className="mb-8">
@@ -141,6 +176,26 @@ export default function SettingsPage() {
                   />
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white shadow rounded-lg">
+          <div className="px-4 py-5 sm:p-6">
+            <h3 className="text-lg leading-6 font-medium text-gray-900">
+              Account
+            </h3>
+            <div className="mt-2 max-w-xl text-sm text-gray-500">
+              <p>Manage your account settings and security.</p>
+            </div>
+            <div className="mt-5">
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+              >
+                Sign Out
+              </button>
             </div>
           </div>
         </div>

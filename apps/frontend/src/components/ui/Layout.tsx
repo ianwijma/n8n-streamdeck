@@ -1,6 +1,8 @@
 'use client';
 
 import React from 'react';
+import { useAuth } from '@/contexts/AuthContext';
+import { usePathname } from 'next/navigation';
 import Header from './Header';
 import Sidebar from './Sidebar';
 
@@ -9,6 +11,17 @@ interface LayoutProps {
 }
 
 export default function Layout({ children }: LayoutProps) {
+  const { isAuthenticated, setupRequired } = useAuth();
+  const pathname = usePathname();
+
+  // Don't show layout for auth pages
+  const isAuthPage = pathname === '/login' || pathname === '/setup';
+  const showLayout = isAuthenticated && !setupRequired && !isAuthPage;
+
+  if (!showLayout) {
+    return <>{children}</>;
+  }
+
   return (
     <div className="h-screen flex overflow-hidden bg-gray-100">
       <Sidebar />
