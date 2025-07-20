@@ -33,7 +33,7 @@ ENV NODE_ENV=${NODE_ENV}
 ENV DOCKER_BUILD=1
 
 # Build frontend application
-RUN pnpm --filter @n8n-streamdeck/frontend build
+RUN pnpm --filter @n8n-streamdeck/frontend build:docker
 
 # Stage 2: Production runtime
 FROM node:22-alpine AS runtime

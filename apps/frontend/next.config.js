@@ -4,9 +4,11 @@ const nextConfig = {
 
   // Enable standalone output for Docker
   output: 'standalone',
+
   // Disable static generation completely to avoid SSR issues
   trailingSlash: true,
   skipTrailingSlashRedirect: true,
+
   // Performance optimizations
   experimental: {
     // Disable CSS optimization for development builds to avoid critters dependency issue
@@ -14,6 +16,8 @@ const nextConfig = {
     optimizePackageImports: ['@tanstack/react-query', 'socket.io-client'],
     // Force dynamic rendering
     forceSwcTransforms: true,
+    // Disable static generation
+    isrMemoryCacheSize: 0,
   },
 
   // Skip build errors for problematic pages
@@ -24,9 +28,30 @@ const nextConfig = {
     ignoreDuringBuilds: true,
   },
 
-  // Disable static generation completely
+  // Disable static optimization completely
   distDir: '.next',
   poweredByHeader: false,
+
+  // Custom webpack config to handle build issues
+  webpack: (config, { dev, isServer }) => {
+    // Skip problematic static generation in production builds
+    if (!dev && !isServer) {
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        fs: false,
+        path: false,
+        os: false,
+      };
+    }
+
+    return config;
+  },
+
+  // Disable static generation completely in Docker
+  ...(process.env.DOCKER_BUILD && {
+    generateStaticParams: false,
+    dynamicParams: true,
+  }),
 
   // Disable static optimization completely
   generateBuildId: async () => {

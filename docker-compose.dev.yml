@@ -27,8 +27,6 @@ services:
       - backend-data:/app/data
     command: >
       sh -c "
-        pnpm --filter @n8n-streamdeck/shared build &&
-        pnpm --filter @n8n-streamdeck/config build &&
         pnpm --filter @n8n-streamdeck/backend dev
       "
     networks:
@@ -66,8 +64,6 @@ services:
       - frontend-logs:/app/logs
     command: >
       sh -c "
-        pnpm --filter @n8n-streamdeck/shared build &&
-        pnpm --filter @n8n-streamdeck/config build &&
         pnpm --filter @n8n-streamdeck/frontend dev
       "
     networks:

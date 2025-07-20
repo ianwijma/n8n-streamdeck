@@ -4,7 +4,8 @@
   "description": "Frontend React app for N8N StreamDeck integration",
   "private": true,
   "scripts": {
-    "build": "next build",
+    "build": "NEXT_PRIVATE_SKIP_STATIC_GENERATION=1 next build",
+    "build:docker": "NODE_ENV=production NEXT_PRIVATE_SKIP_STATIC_GENERATION=1 next build",
     "dev": "next dev",
     "start": "next start",
     "test": "jest",
