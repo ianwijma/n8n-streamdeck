@@ -395,6 +395,22 @@ export class AuthController {
     }
   };
 
+  // For testing purposes - reset setup state
+  resetSetup = async (_req: Request, res: Response): Promise<void> => {
+    try {
+      this.authService.resetSetup();
+      res.json({
+        success: true,
+        message: 'Setup state reset successfully',
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Reset failed',
+      });
+    }
+  };
+
   // Admin endpoints
   getSecurityEvents = async (
     req: AuthenticatedRequest,

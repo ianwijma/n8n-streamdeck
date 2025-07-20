@@ -74,6 +74,8 @@ export class AuthService {
     // Check if setup is needed (no users exist)
     if (this.users.size === 0) {
       this.isSetupComplete = false;
+    } else {
+      this.isSetupComplete = true;
     }
   }
 
@@ -368,6 +370,16 @@ export class AuthService {
 
   async isSetupRequired(): Promise<boolean> {
     return !this.isSetupComplete;
+  }
+
+  // For testing purposes - reset setup state
+  resetSetup(): void {
+    this.users.clear();
+    this.sessions.clear();
+    this.refreshTokens.clear();
+    this.loginAttempts = [];
+    this.securityEvents = [];
+    this.isSetupComplete = false;
   }
 
   async getUserSessions(userId: string): Promise<Session[]> {

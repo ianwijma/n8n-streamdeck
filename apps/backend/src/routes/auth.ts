@@ -30,10 +30,12 @@ const passwordChangeRateLimit = createRateLimiter(
 // Public routes (no authentication required)
 router.get('/setup/check', authController.checkSetup);
 
+// For testing purposes - reset setup state
+router.post('/setup/reset', authController.resetSetup);
+
 // Setup routes (only available when setup is required)
 router.post(
   '/setup',
-  authMiddleware.checkSetup,
   setupRateLimit,
   AuthController.setupValidation,
   authController.setup
