@@ -1,8 +1,11 @@
 // API Response Types
 export interface ApiResponse<T = any> {
-  data: T;
-  message?: string;
   success: boolean;
+  data?: T;
+  error?: ApiError;
+  message?: string;
+  timestamp: string;
+  requestId?: string;
 }
 
 export interface PaginatedResponse<T> extends ApiResponse<T[]> {
@@ -11,14 +14,16 @@ export interface PaginatedResponse<T> extends ApiResponse<T[]> {
     limit: number;
     total: number;
     totalPages: number;
+    hasNext: boolean;
+    hasPrev: boolean;
   };
 }
 
 export interface ApiError {
+  code: string;
   message: string;
-  status: number;
-  code?: string;
-  details?: any;
+  details?: Record<string, any>;
+  stack?: string;
 }
 
 // Device API Types

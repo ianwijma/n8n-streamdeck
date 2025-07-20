@@ -11,7 +11,6 @@ import {
   SecurityEvent,
   LoginAttempt,
 } from '../../types/auth';
-import { ApiResponse } from '../../types/api';
 
 export class AuthService {
   private static instance: AuthService;
@@ -25,26 +24,17 @@ export class AuthService {
   }
 
   async checkSetup(): Promise<{ setupRequired: boolean }> {
-    const response = await apiClient.get<
-      ApiResponse<{ setupRequired: boolean }>
-    >('/api/auth/setup/check');
-    return response.data;
+    return await apiClient.get<{ setupRequired: boolean }>(
+      '/api/auth/setup/check'
+    );
   }
 
   async setup(setupData: SetupRequest): Promise<SetupResponse> {
-    const response = await apiClient.post<ApiResponse<SetupResponse>>(
-      '/api/auth/setup',
-      setupData
-    );
-    return response.data;
+    return await apiClient.post<SetupResponse>('/api/auth/setup', setupData);
   }
 
   async login(credentials: LoginRequest): Promise<LoginResponse> {
-    const response = await apiClient.post<ApiResponse<LoginResponse>>(
-      '/api/auth/login',
-      credentials
-    );
-    return response.data;
+    return await apiClient.post<LoginResponse>('/api/auth/login', credentials);
   }
 
   async logout(): Promise<void> {
@@ -77,9 +67,7 @@ export class AuthService {
   }
 
   private async performRefresh(): Promise<void> {
-    await apiClient.post<ApiResponse<RefreshTokenResponse>>(
-      '/api/auth/refresh'
-    );
+    await apiClient.post<RefreshTokenResponse>('/api/auth/refresh');
     // Tokens are handled via HTTP-only cookies, so no need to store them
   }
 
@@ -88,17 +76,15 @@ export class AuthService {
   }
 
   async getProfile(): Promise<User> {
-    const response =
-      await apiClient.get<ApiResponse<{ user: User }>>('/api/auth/profile');
-    return response.data.user;
+    const response = await apiClient.get<{ user: User }>('/api/auth/profile');
+    return response.user;
   }
 
   async getSessions(): Promise<Session[]> {
-    const response =
-      await apiClient.get<ApiResponse<{ sessions: Session[] }>>(
-        '/api/auth/sessions'
-      );
-    return response.data.sessions;
+    const response = await apiClient.get<{ sessions: Session[] }>(
+      '/api/auth/sessions'
+    );
+    return response.sessions;
   }
 
   async revokeSession(sessionId: string): Promise<void> {
@@ -112,25 +98,27 @@ export class AuthService {
   // Admin methods
   async getSecurityEvents(limit?: number): Promise<SecurityEvent[]> {
     const params = limit ? { limit: limit.toString() } : {};
-    const response = await apiClient.get<
-      ApiResponse<{ events: SecurityEvent[] }>
-    >('/api/auth/admin/security-events', { params });
-    return response.data.events;
+    const response = await apiClient.get<{ events: SecurityEvent[] }>(
+      '/api/auth/admin/security-events',
+      { params }
+    );
+    return response.events;
   }
 
   async getLoginAttempts(limit?: number): Promise<LoginAttempt[]> {
     const params = limit ? { limit: limit.toString() } : {};
-    const response = await apiClient.get<
-      ApiResponse<{ attempts: LoginAttempt[] }>
-    >('/api/auth/admin/login-attempts', { params });
-    return response.data.attempts;
+    const response = await apiClient.get<{ attempts: LoginAttempt[] }>(
+      '/api/auth/admin/login-attempts',
+      { params }
+    );
+    return response.attempts;
   }
 
   async getActiveSessions(): Promise<Session[]> {
-    const response = await apiClient.get<ApiResponse<{ sessions: Session[] }>>(
+    const response = await apiClient.get<{ sessions: Session[] }>(
       '/api/auth/admin/active-sessions'
     );
-    return response.data.sessions;
+    return response.sessions;
   }
 
   private clearTokens(): void {

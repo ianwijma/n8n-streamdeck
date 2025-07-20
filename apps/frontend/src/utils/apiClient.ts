@@ -15,16 +15,19 @@ declare module 'axios' {
 }
 
 export interface ApiError {
+  code: string;
   message: string;
-  status: number;
-  code?: string;
-  details?: any;
+  details?: Record<string, any>;
+  stack?: string;
 }
 
 export interface ApiResponse<T = any> {
-  data: T;
-  message?: string;
   success: boolean;
+  data?: T;
+  error?: ApiError;
+  message?: string;
+  timestamp: string;
+  requestId?: string;
 }
 
 export interface PaginatedResponse<T> extends ApiResponse<T[]> {
@@ -33,6 +36,8 @@ export interface PaginatedResponse<T> extends ApiResponse<T[]> {
     limit: number;
     total: number;
     totalPages: number;
+    hasNext: boolean;
+    hasPrev: boolean;
   };
 }
 
@@ -113,26 +118,27 @@ class ApiClient {
   private handleError(error: AxiosError): ApiError {
     if (error.response) {
       // Server responded with error status
-      const { status, data } = error.response;
+      const { data } = error.response;
       return {
-        message: (data as any)?.message || error.message || 'An error occurred',
-        status,
-        code: (data as any)?.code,
-        details: (data as any)?.details,
+        code: (data as any)?.error?.code || (data as any)?.code || 'HTTP_ERROR',
+        message:
+          (data as any)?.error?.message ||
+          (data as any)?.message ||
+          error.message ||
+          'An error occurred',
+        details: (data as any)?.error?.details || (data as any)?.details,
       };
     } else if (error.request) {
       // Request was made but no response received
       return {
-        message: 'Network error - please check your connection',
-        status: 0,
         code: 'NETWORK_ERROR',
+        message: 'Network error - please check your connection',
       };
     } else {
       // Something else happened
       return {
-        message: error.message || 'An unexpected error occurred',
-        status: 0,
         code: 'UNKNOWN_ERROR',
+        message: error.message || 'An unexpected error occurred',
       };
     }
   }
@@ -140,6 +146,9 @@ class ApiClient {
   // Generic HTTP methods
   async get<T = any>(url: string, config?: AxiosRequestConfig): Promise<T> {
     const response = await this.client.get<ApiResponse<T>>(url, config);
+    if (!response.data.success || response.data.data === undefined) {
+      throw new Error(response.data.error?.message || 'Request failed');
+    }
     return response.data.data;
   }
 
@@ -149,6 +158,9 @@ class ApiClient {
     config?: AxiosRequestConfig
   ): Promise<T> {
     const response = await this.client.post<ApiResponse<T>>(url, data, config);
+    if (!response.data.success || response.data.data === undefined) {
+      throw new Error(response.data.error?.message || 'Request failed');
+    }
     return response.data.data;
   }
 
@@ -158,6 +170,9 @@ class ApiClient {
     config?: AxiosRequestConfig
   ): Promise<T> {
     const response = await this.client.put<ApiResponse<T>>(url, data, config);
+    if (!response.data.success || response.data.data === undefined) {
+      throw new Error(response.data.error?.message || 'Request failed');
+    }
     return response.data.data;
   }
 
@@ -167,11 +182,17 @@ class ApiClient {
     config?: AxiosRequestConfig
   ): Promise<T> {
     const response = await this.client.patch<ApiResponse<T>>(url, data, config);
+    if (!response.data.success || response.data.data === undefined) {
+      throw new Error(response.data.error?.message || 'Request failed');
+    }
     return response.data.data;
   }
 
   async delete<T = any>(url: string, config?: AxiosRequestConfig): Promise<T> {
     const response = await this.client.delete<ApiResponse<T>>(url, config);
+    if (!response.data.success || response.data.data === undefined) {
+      throw new Error(response.data.error?.message || 'Request failed');
+    }
     return response.data.data;
   }
 
@@ -198,6 +219,9 @@ class ApiClient {
       },
     });
 
+    if (!response.data.success || response.data.data === undefined) {
+      throw new Error(response.data.error?.message || 'Request failed');
+    }
     return response.data.data;
   }
 
