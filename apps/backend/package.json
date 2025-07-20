@@ -22,7 +22,12 @@
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",
-    "db:reset": "prisma migrate reset"
+    "db:reset": "prisma migrate reset",
+    "migration:create": "tsx src/scripts/createMigration.ts create",
+    "migration:deploy": "tsx src/scripts/createMigration.ts deploy",
+    "migration:status": "tsx src/scripts/createMigration.ts status",
+    "migration:reset": "tsx src/scripts/createMigration.ts reset",
+    "migration:generate": "tsx src/scripts/createMigration.ts generate"
   },
   "dependencies": {
     "@elgato-stream-deck/node": "^7.3.2",
