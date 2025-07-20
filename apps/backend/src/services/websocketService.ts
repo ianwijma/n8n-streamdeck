@@ -137,18 +137,18 @@ export class WebSocketService {
     // Listen for StreamDeck service events and broadcast to clients
     this.streamDeckService.on('deviceConnected', (event) => {
       this.logger.info('Broadcasting device connected event', {
-        deviceId: event.data.device.id,
+        deviceId: event.device.id,
         clientsCount: this.connectedClients.size,
       });
 
       this.broadcast('device:connected', {
         type: 'device-connected',
-        deviceId: event.data.device.id,
+        deviceId: event.device.id,
         device: {
-          ...event.data.device,
-          connected: event.data.device.isConnected,
-          createdAt: event.data.device.createdAt.toISOString(),
-          updatedAt: event.data.device.updatedAt.toISOString(),
+          ...event.device,
+          connected: event.device.isConnected,
+          createdAt: event.device.createdAt.toISOString(),
+          updatedAt: event.device.updatedAt.toISOString(),
         },
         timestamp: event.timestamp,
       });
@@ -156,54 +156,54 @@ export class WebSocketService {
 
     this.streamDeckService.on('deviceDisconnected', (event) => {
       this.logger.info('Broadcasting device disconnected event', {
-        deviceId: event.data.deviceId,
+        deviceId: event.deviceId,
         clientsCount: this.connectedClients.size,
       });
 
       this.broadcast('device:disconnected', {
         type: 'device-disconnected',
-        deviceId: event.data.deviceId,
-        device: event.data.device
+        deviceId: event.deviceId,
+        device: event.device
           ? {
-              ...event.data.device,
-              connected: event.data.device.isConnected,
-              createdAt: event.data.device.createdAt.toISOString(),
-              updatedAt: event.data.device.updatedAt.toISOString(),
+              ...event.device,
+              connected: event.device.isConnected,
+              createdAt: event.device.createdAt.toISOString(),
+              updatedAt: event.device.updatedAt.toISOString(),
             }
           : null,
-        reason: event.data.reason,
+        reason: event.reason,
         timestamp: event.timestamp,
       });
     });
 
     this.streamDeckService.on('buttonPress', (event) => {
       this.logger.info('Broadcasting button press event', {
-        deviceId: event.data.deviceId,
-        buttonIndex: event.data.buttonIndex,
+        deviceId: event.deviceId,
+        buttonIndex: event.buttonIndex,
         clientsCount: this.connectedClients.size,
       });
 
       this.broadcast('button:pressed', {
         type: 'button-pressed',
-        deviceId: event.data.deviceId,
-        buttonIndex: event.data.buttonIndex,
-        pressType: event.data.pressType,
-        duration: event.data.duration,
+        deviceId: event.deviceId,
+        buttonIndex: event.buttonIndex,
+        pressType: event.pressType,
+        duration: event.duration,
         timestamp: event.timestamp,
       });
     });
 
     this.streamDeckService.on('deviceError', (event) => {
       this.logger.warn('Broadcasting device error event', {
-        deviceId: event.data.deviceId,
-        error: event.data.error.message,
+        deviceId: event.deviceId,
+        error: event.error.message,
         clientsCount: this.connectedClients.size,
       });
 
       this.broadcast('device:error', {
         type: 'device-error',
-        deviceId: event.data.deviceId,
-        error: event.data.error,
+        deviceId: event.deviceId,
+        error: event.error,
         timestamp: event.timestamp,
       });
     });
