@@ -1,12 +1,12 @@
 import { Router, type Router as ExpressRouter } from 'express';
 import { AuthController } from '../controllers/authController';
 import { AuthMiddleware, createRateLimiter } from '../middleware/auth';
-import { AuthService } from '../services/authService';
+import { AuthServiceDb } from '../services/authServiceDb';
 
 const router: ExpressRouter = Router();
 
 // Initialize services
-const authService = new AuthService();
+const authService = new AuthServiceDb();
 const authController = new AuthController(authService);
 const authMiddleware = new AuthMiddleware(authService);
 

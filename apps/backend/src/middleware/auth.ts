@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { AuthService } from '../services/authService';
+import { AuthServiceDb } from '../services/authServiceDb';
 import { UserRole } from '../types/auth';
 
 export interface AuthenticatedRequest extends Request {
@@ -8,7 +8,7 @@ export interface AuthenticatedRequest extends Request {
 }
 
 export class AuthMiddleware {
-  constructor(private authService: AuthService) {}
+  constructor(private authService: AuthServiceDb) {}
 
   authenticate = async (
     req: AuthenticatedRequest,

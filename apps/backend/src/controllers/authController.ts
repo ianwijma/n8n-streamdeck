@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { body, validationResult } from 'express-validator';
-import { AuthService } from '../services/authService';
+import { AuthServiceDb } from '../services/authServiceDb';
 import { AuthenticatedRequest } from '../middleware/auth';
 import {
   LoginRequest,
@@ -10,7 +10,7 @@ import {
 } from '../types/auth';
 
 export class AuthController {
-  constructor(private authService: AuthService) {}
+  constructor(private authService: AuthServiceDb) {}
 
   // Setup validation rules
   static setupValidation = [

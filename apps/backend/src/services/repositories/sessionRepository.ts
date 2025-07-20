@@ -14,6 +14,9 @@ export class SessionRepository {
     userId?: string;
     token: string;
     expiresAt: Date;
+    ipAddress?: string;
+    userAgent?: string;
+    isActive?: boolean;
   }): Promise<Session> {
     return this.prisma.session.create({
       data,

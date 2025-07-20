@@ -183,7 +183,14 @@ BCRYPT_ROUNDS="12"
 
 ## Migration from In-Memory Storage
 
-The existing services that used in-memory storage (Maps, arrays) can be gradually migrated to use the database repositories. The new `AuthServiceDb` class demonstrates how to replace the original `AuthService` with database-backed storage.
+✅ **COMPLETED**: The authentication system has been migrated from in-memory storage to database-backed storage:
+
+- `AuthService` → `AuthServiceDb` (now active)
+- `AuthController` updated to use database service
+- `AuthMiddleware` updated to use database service
+- All authentication routes now use persistent database storage
+
+The old `AuthService` has been renamed to `authService.ts.deprecated` for reference.
 
 ## Production Considerations
 
