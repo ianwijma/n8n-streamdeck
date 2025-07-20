@@ -41,6 +41,14 @@ router.get(
   })
 );
 
+// PUT /api/devices/:deviceId/buttons/:buttonId - Update button configuration
+router.put(
+  '/:buttonId',
+  asyncHandler(async (req: Request, res: Response) => {
+    await buttonController.updateButton(req, res);
+  })
+);
+
 // DELETE /api/devices/:deviceId/buttons/:buttonId - Delete button
 router.delete(
   '/:buttonId',

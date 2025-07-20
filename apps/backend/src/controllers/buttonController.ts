@@ -130,14 +130,14 @@ export class ButtonController {
     try {
       const { deviceId } = req.params;
       const {
-        index,
-        label,
+        position,
+        title,
         icon,
         action,
         backgroundColor,
         textColor,
         fontSize,
-        isEnabled = true,
+        enabled = true,
       } = req.body;
 
       if (!deviceId) {
@@ -152,11 +152,11 @@ export class ButtonController {
         return;
       }
 
-      if (typeof index !== 'number' || index < 0) {
+      if (typeof position !== 'number' || position < 0) {
         const errorResponse = createErrorResponse(
           {
             code: ApiErrorCode.VALIDATION_ERROR,
-            message: 'Button index must be a non-negative number',
+            message: 'Button position must be a non-negative number',
           },
           req.requestId
         );
@@ -167,8 +167,8 @@ export class ButtonController {
       logger.info('Creating/updating button', {
         requestId: req.requestId,
         deviceId,
-        index,
-        label,
+        position,
+        title,
       });
 
       // Check if device exists
@@ -185,12 +185,12 @@ export class ButtonController {
         return;
       }
 
-      // Validate button index
-      if (index >= device.buttonCount) {
+      // Validate button position
+      if (position >= device.buttonCount) {
         const errorResponse = createErrorResponse(
           {
             code: ApiErrorCode.INVALID_BUTTON_INDEX,
-            message: `Button index ${index} is out of range for device (max: ${device.buttonCount - 1})`,
+            message: `Button position ${position} is out of range for device (max: ${device.buttonCount - 1})`,
           },
           req.requestId
         );
@@ -219,14 +219,14 @@ export class ButtonController {
       }
 
       // Find existing button or create new one
-      let button = buttons.find((b) => b.index === index);
+      let button = buttons.find((b) => b.index === position);
       const isNewButton = !button;
 
       if (isNewButton) {
         button = {
-          id: `btn-${deviceId}-${index}-${generateUUID()}`,
+          id: `btn-${deviceId}-${position}-${generateUUID()}`,
           deviceId,
-          index,
+          index: position,
           isEnabled: true,
           createdAt: new Date(),
           updatedAt: new Date(),
@@ -235,14 +235,14 @@ export class ButtonController {
       }
 
       // Update button properties
-      if (label !== undefined) button!.label = label;
+      if (title !== undefined) button!.label = title;
       if (icon !== undefined) button!.icon = icon;
       if (action !== undefined) button!.action = action;
       if (backgroundColor !== undefined)
         button!.backgroundColor = backgroundColor;
       if (textColor !== undefined) button!.textColor = textColor;
       if (fontSize !== undefined) button!.fontSize = fontSize;
-      if (isEnabled !== undefined) button!.isEnabled = isEnabled;
+      if (enabled !== undefined) button!.isEnabled = enabled;
       button!.updatedAt = new Date();
 
       // Sort buttons by index
@@ -269,6 +269,114 @@ export class ButtonController {
         {
           code: ApiErrorCode.INTERNAL_ERROR,
           message: 'Failed to create/update button',
+          details: { error: (error as Error).message },
+        },
+        req.requestId
+      );
+
+      res.status(HttpStatusCode.INTERNAL_SERVER_ERROR).json(errorResponse);
+    }
+  }
+
+  /**
+   * PUT /devices/:deviceId/buttons/:buttonId - Update button configuration
+   */
+  async updateButton(req: Request, res: Response): Promise<void> {
+    try {
+      const { deviceId, buttonId } = req.params;
+      const {
+        title,
+        icon,
+        action,
+        backgroundColor,
+        textColor,
+        fontSize,
+        enabled = true,
+      } = req.body;
+
+      if (!deviceId || !buttonId) {
+        const errorResponse = createErrorResponse(
+          {
+            code: ApiErrorCode.VALIDATION_ERROR,
+            message: 'Device ID and Button ID are required',
+          },
+          req.requestId
+        );
+        res.status(HttpStatusCode.BAD_REQUEST).json(errorResponse);
+        return;
+      }
+
+      logger.info('Updating button', {
+        requestId: req.requestId,
+        deviceId,
+        buttonId,
+        title,
+      });
+
+      // Check if device exists
+      const device = this.streamDeckService.getDevice(deviceId);
+      if (!device) {
+        const errorResponse = createErrorResponse(
+          {
+            code: ApiErrorCode.NOT_FOUND,
+            message: `Device with ID '${deviceId}' not found`,
+          },
+          req.requestId
+        );
+        res.status(HttpStatusCode.NOT_FOUND).json(errorResponse);
+        return;
+      }
+
+      // Get buttons for device
+      let buttons = buttonStorage.get(deviceId);
+      if (!buttons) {
+        buttons = this.createDefaultButtons(deviceId, device.buttonCount);
+        buttonStorage.set(deviceId, buttons);
+      }
+
+      // Find button
+      const button = buttons.find((b) => b.id === buttonId);
+      if (!button) {
+        const errorResponse = createErrorResponse(
+          {
+            code: ApiErrorCode.NOT_FOUND,
+            message: `Button with ID '${buttonId}' not found`,
+          },
+          req.requestId
+        );
+        res.status(HttpStatusCode.NOT_FOUND).json(errorResponse);
+        return;
+      }
+
+      // Update button properties
+      if (title !== undefined) button.label = title;
+      if (icon !== undefined) button.icon = icon;
+      if (action !== undefined) button.action = action;
+      if (backgroundColor !== undefined)
+        button.backgroundColor = backgroundColor;
+      if (textColor !== undefined) button.textColor = textColor;
+      if (fontSize !== undefined) button.fontSize = fontSize;
+      if (enabled !== undefined) button.isEnabled = enabled;
+      button.updatedAt = new Date();
+
+      const response = createSuccessResponse(
+        button,
+        'Button updated successfully',
+        req.requestId
+      );
+
+      res.status(HttpStatusCode.OK).json(response);
+    } catch (error) {
+      logger.error('Failed to update button', error as Error, {
+        requestId: req.requestId,
+        deviceId: req.params.deviceId,
+        buttonId: req.params.buttonId,
+      });
+
+      const errorResponse = createErrorResponse(
+        {
+          code: ApiErrorCode.INTERNAL_ERROR,
+          message: 'Failed to update button',
           details: { error: (error as Error).message },
         },
         req.requestId
