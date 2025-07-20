@@ -216,9 +216,9 @@ class PortManager {
   async killAllPorts() {
     console.log('🧹 Cleaning up all development ports...');
 
-    for (const port of Object.values(PORTS)) {
-      await this.killPort(port);
-    }
+    // Kill all ports in parallel for faster execution
+    const portKills = Object.values(PORTS).map((port) => this.killPort(port));
+    await Promise.all(portKills);
 
     // Also kill any Node.js processes that might be related
     try {
@@ -233,7 +233,7 @@ class PortManager {
 
       if (nodeProcesses) {
         const lines = nodeProcesses.split('\n');
-        for (const line of lines) {
+        const killPromises = lines.map(async (line) => {
           const parts = line.trim().split(/\s+/);
           const pid = parts[1];
           if (pid && /^\d+$/.test(pid)) {
@@ -244,7 +244,8 @@ class PortManager {
               // Process may have already exited
             }
           }
-        }
+        });
+        await Promise.all(killPromises);
       }
     } catch (error) {
       // No matching processes found
@@ -262,7 +263,8 @@ class PortManager {
 
     const conflicts = [];
 
-    for (const [name, port] of Object.entries(PORTS)) {
+    // Check all ports in parallel for faster execution
+    const portChecks = Object.entries(PORTS).map(async ([name, port]) => {
       const inUse = await this.isPortInUse(port);
       if (inUse) {
         conflicts.push({ name, port });
@@ -270,7 +272,11 @@ class PortManager {
       } else {
         console.log(`✅ Port ${port} (${name}) is available`);
       }
-    }
+      return { name, port, inUse };
+    });
+
+    // Wait for all port checks to complete
+    await Promise.all(portChecks);
 
     return conflicts;
   }

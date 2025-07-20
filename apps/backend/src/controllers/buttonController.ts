@@ -8,28 +8,26 @@ import {
   Button,
   ButtonAction,
   ButtonActionType,
-  generateUUID,
 } from '@n8n-streamdeck/shared';
 import { StreamDeckService } from '../services/streamDeckService';
 import { WebhookService } from '../services/webhookService';
 import { ButtonSyncService } from '../services/buttonSyncService';
+import { ButtonRepository } from '../services/repositories/buttonRepository';
 import { config } from '../config/environment';
 
 const logger = new Logger({ level: config.logLevel }, 'ButtonController');
-
-// In-memory button storage for demo purposes
-// In a real application, this would be stored in a database
-const buttonStorage = new Map<string, Button[]>();
 
 export class ButtonController {
   private streamDeckService: StreamDeckService;
   private webhookService: WebhookService;
   private syncService: ButtonSyncService;
+  private buttonRepository: ButtonRepository;
 
   constructor(streamDeckService: StreamDeckService) {
     this.streamDeckService = streamDeckService;
     this.webhookService = WebhookService.getInstance();
     this.syncService = ButtonSyncService.getInstance();
+    this.buttonRepository = new ButtonRepository();
 
     // Listen for device connection events to initialize buttons
     this.streamDeckService.on(
@@ -52,10 +50,14 @@ export class ButtonController {
       }
       logger.info('Device connected, initializing buttons', { deviceId });
 
-      // Get current button configurations for this device
-      const buttons = buttonStorage.get(deviceId);
+      // Get current button configurations for this device from database
+      const buttons = await this.buttonRepository.findByDeviceId(deviceId);
       if (buttons && buttons.length > 0) {
-        await this.syncService.initializeDeviceButtons(deviceId, buttons);
+        // Convert database buttons to shared Button format
+        const sharedButtons = buttons.map((button) =>
+          this.convertToSharedButton(button)
+        );
+        await this.syncService.initializeDeviceButtons(deviceId, sharedButtons);
       } else {
         logger.info('No button configurations found for device', { deviceId });
       }
@@ -65,6 +67,37 @@ export class ButtonController {
         error as Error
       );
     }
+  }
+
+  /**
+   * Convert database button to shared Button format
+   */
+  private convertToSharedButton(dbButton: any): Button {
+    return {
+      id: dbButton.id,
+      deviceId: dbButton.deviceId,
+      index: dbButton.index,
+      label: dbButton.label || undefined,
+      icon: dbButton.icon || undefined,
+      action: dbButton.actionType
+        ? {
+            type: dbButton.actionType,
+            payload: dbButton.actionPayload
+              ? JSON.parse(dbButton.actionPayload)
+              : {},
+            n8nWorkflowId: dbButton.n8nWorkflowId || undefined,
+            webhookUrl: dbButton.webhookUrl || undefined,
+            command: dbButton.command || undefined,
+            hotkey: dbButton.hotkey ? JSON.parse(dbButton.hotkey) : undefined,
+          }
+        : undefined,
+      isEnabled: dbButton.isEnabled,
+      backgroundColor: dbButton.backgroundColor || undefined,
+      textColor: dbButton.textColor || undefined,
+      fontSize: dbButton.fontSize || undefined,
+      createdAt: dbButton.createdAt,
+      updatedAt: dbButton.updatedAt,
+    };
   }
 
   /**
@@ -109,10 +142,12 @@ export class ButtonController {
       }
 
       // Get buttons for device or create default ones
-      let buttons = buttonStorage.get(deviceId);
-      if (!buttons) {
-        buttons = this.createDefaultButtons(deviceId, device.buttonCount);
-        buttonStorage.set(deviceId, buttons);
+      let buttons = await this.buttonRepository.findByDeviceId(deviceId);
+      if (!buttons || buttons.length === 0) {
+        buttons = await this.buttonRepository.createDefaultButtons(
+          deviceId,
+          device.buttonCount
+        );
       }
 
       // Pagination
@@ -253,45 +288,60 @@ export class ButtonController {
         return;
       }
 
-      // Get or create buttons array for device
-      let buttons = buttonStorage.get(deviceId);
-      if (!buttons) {
-        buttons = this.createDefaultButtons(deviceId, device.buttonCount);
-        buttonStorage.set(deviceId, buttons);
-      }
-
       // Find existing button or create new one
-      let button = buttons.find((b) => b.index === position);
+      let button = await this.buttonRepository.findByDeviceAndIndex(
+        deviceId,
+        position
+      );
       const isNewButton = !button;
 
       if (isNewButton) {
-        button = {
-          id: `btn-${deviceId}-${position}-${generateUUID()}`,
+        // Create new button in database
+        button = await this.buttonRepository.create({
           deviceId,
           index: position,
-          isEnabled: true,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        };
-        buttons.push(button);
+          label: title,
+          icon,
+          actionType: action?.type,
+          actionPayload: action ? JSON.stringify(action) : undefined,
+          n8nWorkflowId: action?.n8nWorkflowId,
+          webhookUrl: action?.webhookUrl,
+          command: action?.command,
+          hotkey: action?.hotkey ? JSON.stringify(action.hotkey) : undefined,
+          isEnabled: enabled,
+          backgroundColor,
+          textColor,
+          fontSize,
+        });
+      } else {
+        // Update existing button in database
+        const updateData: any = {};
+        if (title !== undefined) updateData.label = title;
+        if (icon !== undefined) updateData.icon = icon;
+        if (action !== undefined) {
+          updateData.actionType = action.type;
+          updateData.actionPayload = JSON.stringify(action);
+          updateData.n8nWorkflowId = action.n8nWorkflowId;
+          updateData.webhookUrl = action.webhookUrl;
+          updateData.command = action.command;
+          updateData.hotkey = action.hotkey
+            ? JSON.stringify(action.hotkey)
+            : undefined;
+        }
+        if (backgroundColor !== undefined)
+          updateData.backgroundColor = backgroundColor;
+        if (textColor !== undefined) updateData.textColor = textColor;
+        if (fontSize !== undefined) updateData.fontSize = fontSize;
+        if (enabled !== undefined) updateData.isEnabled = enabled;
+
+        button = await this.buttonRepository.update(button!.id, updateData);
       }
 
-      // Update button properties
-      if (title !== undefined) button!.label = title;
-      if (icon !== undefined) button!.icon = icon;
-      if (action !== undefined) button!.action = action;
-      if (backgroundColor !== undefined)
-        button!.backgroundColor = backgroundColor;
-      if (textColor !== undefined) button!.textColor = textColor;
-      if (fontSize !== undefined) button!.fontSize = fontSize;
-      if (enabled !== undefined) button!.isEnabled = enabled;
-      button!.updatedAt = new Date();
-
-      // Sort buttons by index
-      buttons.sort((a, b) => a.index - b.index);
-
       // Update physical device
-      await this.updatePhysicalButton(deviceId, button!);
+      if (button) {
+        const sharedButton = this.convertToSharedButton(button);
+        await this.updatePhysicalButton(deviceId, sharedButton);
+      }
 
       const response = createSuccessResponse(
         this.transformButtonToResponse(button!),
@@ -324,456 +374,6 @@ export class ButtonController {
   }
 
   /**
-   * PUT /devices/:deviceId/buttons/:buttonId - Update button configuration
-   */
-  async updateButton(req: Request, res: Response): Promise<void> {
-    try {
-      const { deviceId, buttonId } = req.params;
-      const {
-        title,
-        icon,
-        action,
-        backgroundColor,
-        textColor,
-        fontSize,
-        enabled = true,
-      } = req.body;
-
-      if (!deviceId || !buttonId) {
-        const errorResponse = createErrorResponse(
-          {
-            code: ApiErrorCode.VALIDATION_ERROR,
-            message: 'Device ID and Button ID are required',
-          },
-          req.requestId
-        );
-        res.status(HttpStatusCode.BAD_REQUEST).json(errorResponse);
-        return;
-      }
-
-      logger.info('Updating button', {
-        requestId: req.requestId,
-        deviceId,
-        buttonId,
-        title,
-      });
-
-      // Check if device exists
-      const device = this.streamDeckService.getDevice(deviceId);
-      if (!device) {
-        const errorResponse = createErrorResponse(
-          {
-            code: ApiErrorCode.NOT_FOUND,
-            message: `Device with ID '${deviceId}' not found`,
-          },
-          req.requestId
-        );
-        res.status(HttpStatusCode.NOT_FOUND).json(errorResponse);
-        return;
-      }
-
-      // Get buttons for device
-      let buttons = buttonStorage.get(deviceId);
-      if (!buttons) {
-        buttons = this.createDefaultButtons(deviceId, device.buttonCount);
-        buttonStorage.set(deviceId, buttons);
-      }
-
-      // Find button
-      const button = buttons.find((b) => b.id === buttonId);
-      if (!button) {
-        const errorResponse = createErrorResponse(
-          {
-            code: ApiErrorCode.NOT_FOUND,
-            message: `Button with ID '${buttonId}' not found`,
-          },
-          req.requestId
-        );
-        res.status(HttpStatusCode.NOT_FOUND).json(errorResponse);
-        return;
-      }
-
-      // Update button properties
-      if (title !== undefined) button.label = title;
-      if (icon !== undefined) button.icon = icon;
-      if (action !== undefined) button.action = action;
-      if (backgroundColor !== undefined)
-        button.backgroundColor = backgroundColor;
-      if (textColor !== undefined) button.textColor = textColor;
-      if (fontSize !== undefined) button.fontSize = fontSize;
-      if (enabled !== undefined) button.isEnabled = enabled;
-      button.updatedAt = new Date();
-
-      // Update physical device
-      await this.updatePhysicalButton(deviceId, button);
-
-      const response = createSuccessResponse(
-        this.transformButtonToResponse(button),
-        'Button updated successfully',
-        req.requestId
-      );
-
-      res.status(HttpStatusCode.OK).json(response);
-    } catch (error) {
-      logger.error('Failed to update button', error as Error, {
-        requestId: req.requestId,
-        deviceId: req.params.deviceId,
-        buttonId: req.params.buttonId,
-      });
-
-      const errorResponse = createErrorResponse(
-        {
-          code: ApiErrorCode.INTERNAL_ERROR,
-          message: 'Failed to update button',
-          details: { error: (error as Error).message },
-        },
-        req.requestId
-      );
-
-      res.status(HttpStatusCode.INTERNAL_SERVER_ERROR).json(errorResponse);
-    }
-  }
-
-  /**
-   * GET /devices/:deviceId/buttons/:buttonId - Get button details
-   */
-  async getButton(req: Request, res: Response): Promise<void> {
-    try {
-      const { deviceId, buttonId } = req.params;
-
-      if (!deviceId || !buttonId) {
-        const errorResponse = createErrorResponse(
-          {
-            code: ApiErrorCode.VALIDATION_ERROR,
-            message: 'Device ID and Button ID are required',
-          },
-          req.requestId
-        );
-        res.status(HttpStatusCode.BAD_REQUEST).json(errorResponse);
-        return;
-      }
-
-      logger.info('Fetching button details', {
-        requestId: req.requestId,
-        deviceId,
-        buttonId,
-      });
-
-      // Check if device exists
-      const device = this.streamDeckService.getDevice(deviceId);
-      if (!device) {
-        const errorResponse = createErrorResponse(
-          {
-            code: ApiErrorCode.NOT_FOUND,
-            message: `Device with ID '${deviceId}' not found`,
-          },
-          req.requestId
-        );
-        res.status(HttpStatusCode.NOT_FOUND).json(errorResponse);
-        return;
-      }
-
-      // Get buttons for device
-      const buttons = buttonStorage.get(deviceId);
-      if (!buttons) {
-        const errorResponse = createErrorResponse(
-          {
-            code: ApiErrorCode.NOT_FOUND,
-            message: 'No buttons found for device',
-          },
-          req.requestId
-        );
-        res.status(HttpStatusCode.NOT_FOUND).json(errorResponse);
-        return;
-      }
-
-      // Find button
-      const button = buttons.find((b) => b.id === buttonId);
-      if (!button) {
-        const errorResponse = createErrorResponse(
-          {
-            code: ApiErrorCode.NOT_FOUND,
-            message: `Button with ID '${buttonId}' not found`,
-          },
-          req.requestId
-        );
-        res.status(HttpStatusCode.NOT_FOUND).json(errorResponse);
-        return;
-      }
-
-      const response = createSuccessResponse(
-        this.transformButtonToResponse(button),
-        'Button found',
-        req.requestId
-      );
-
-      res.status(HttpStatusCode.OK).json(response);
-    } catch (error) {
-      logger.error('Failed to get button', error as Error, {
-        requestId: req.requestId,
-        deviceId: req.params.deviceId,
-        buttonId: req.params.buttonId,
-      });
-
-      const errorResponse = createErrorResponse(
-        {
-          code: ApiErrorCode.INTERNAL_ERROR,
-          message: 'Failed to retrieve button',
-          details: { error: (error as Error).message },
-        },
-        req.requestId
-      );
-
-      res.status(HttpStatusCode.INTERNAL_SERVER_ERROR).json(errorResponse);
-    }
-  }
-
-  /**
-   * DELETE /devices/:deviceId/buttons/:buttonId - Delete button
-   */
-  async deleteButton(req: Request, res: Response): Promise<void> {
-    try {
-      const { deviceId, buttonId } = req.params;
-
-      if (!deviceId || !buttonId) {
-        const errorResponse = createErrorResponse(
-          {
-            code: ApiErrorCode.VALIDATION_ERROR,
-            message: 'Device ID and Button ID are required',
-          },
-          req.requestId
-        );
-        res.status(HttpStatusCode.BAD_REQUEST).json(errorResponse);
-        return;
-      }
-
-      logger.info('Deleting button', {
-        requestId: req.requestId,
-        deviceId,
-        buttonId,
-      });
-
-      // Check if device exists
-      const device = this.streamDeckService.getDevice(deviceId);
-      if (!device) {
-        const errorResponse = createErrorResponse(
-          {
-            code: ApiErrorCode.NOT_FOUND,
-            message: `Device with ID '${deviceId}' not found`,
-          },
-          req.requestId
-        );
-        res.status(HttpStatusCode.NOT_FOUND).json(errorResponse);
-        return;
-      }
-
-      // Get buttons for device
-      const buttons = buttonStorage.get(deviceId);
-      if (!buttons) {
-        const errorResponse = createErrorResponse(
-          {
-            code: ApiErrorCode.NOT_FOUND,
-            message: 'No buttons found for device',
-          },
-          req.requestId
-        );
-        res.status(HttpStatusCode.NOT_FOUND).json(errorResponse);
-        return;
-      }
-
-      // Find button index
-      const buttonIndex = buttons.findIndex((b) => b.id === buttonId);
-      if (buttonIndex === -1) {
-        const errorResponse = createErrorResponse(
-          {
-            code: ApiErrorCode.NOT_FOUND,
-            message: `Button with ID '${buttonId}' not found`,
-          },
-          req.requestId
-        );
-        res.status(HttpStatusCode.NOT_FOUND).json(errorResponse);
-        return;
-      }
-
-      // Remove button (reset to default)
-      const button = buttons[buttonIndex];
-      const defaultButton = this.createDefaultButton(deviceId, button.index);
-      buttons[buttonIndex] = defaultButton;
-
-      const response = createSuccessResponse(
-        this.transformButtonToResponse(defaultButton),
-        'Button reset to default successfully',
-        req.requestId
-      );
-
-      res.status(HttpStatusCode.OK).json(response);
-    } catch (error) {
-      logger.error('Failed to delete button', error as Error, {
-        requestId: req.requestId,
-        deviceId: req.params.deviceId,
-        buttonId: req.params.buttonId,
-      });
-
-      const errorResponse = createErrorResponse(
-        {
-          code: ApiErrorCode.INTERNAL_ERROR,
-          message: 'Failed to delete button',
-          details: { error: (error as Error).message },
-        },
-        req.requestId
-      );
-
-      res.status(HttpStatusCode.INTERNAL_SERVER_ERROR).json(errorResponse);
-    }
-  }
-
-  /**
-   * POST /devices/:deviceId/buttons/:buttonId/press - Simulate button press
-   */
-  async pressButton(req: Request, res: Response): Promise<void> {
-    try {
-      const { deviceId, buttonId } = req.params;
-
-      if (!deviceId || !buttonId) {
-        const errorResponse = createErrorResponse(
-          {
-            code: ApiErrorCode.VALIDATION_ERROR,
-            message: 'Device ID and Button ID are required',
-          },
-          req.requestId
-        );
-        res.status(HttpStatusCode.BAD_REQUEST).json(errorResponse);
-        return;
-      }
-
-      logger.info('Simulating button press', {
-        requestId: req.requestId,
-        deviceId,
-        buttonId,
-      });
-
-      // Check if device exists and is connected
-      const device = this.streamDeckService.getDevice(deviceId);
-      if (!device) {
-        const errorResponse = createErrorResponse(
-          {
-            code: ApiErrorCode.NOT_FOUND,
-            message: `Device with ID '${deviceId}' not found`,
-          },
-          req.requestId
-        );
-        res.status(HttpStatusCode.NOT_FOUND).json(errorResponse);
-        return;
-      }
-
-      if (!this.streamDeckService.isDeviceConnected(deviceId)) {
-        const errorResponse = createErrorResponse(
-          {
-            code: ApiErrorCode.DEVICE_NOT_CONNECTED,
-            message: 'Device is not connected',
-          },
-          req.requestId
-        );
-        res.status(HttpStatusCode.BAD_REQUEST).json(errorResponse);
-        return;
-      }
-
-      // Get button
-      const buttons = buttonStorage.get(deviceId);
-      const button = buttons?.find((b) => b.id === buttonId);
-
-      if (!button) {
-        const errorResponse = createErrorResponse(
-          {
-            code: ApiErrorCode.NOT_FOUND,
-            message: `Button with ID '${buttonId}' not found`,
-          },
-          req.requestId
-        );
-        res.status(HttpStatusCode.NOT_FOUND).json(errorResponse);
-        return;
-      }
-
-      if (!button.isEnabled) {
-        const errorResponse = createErrorResponse(
-          {
-            code: ApiErrorCode.VALIDATION_ERROR,
-            message: 'Button is disabled',
-          },
-          req.requestId
-        );
-        res.status(HttpStatusCode.BAD_REQUEST).json(errorResponse);
-        return;
-      }
-
-      // Send webhook event for button press
-      const buttonPressEvent = {
-        event: 'pressed' as const,
-        deviceId,
-        buttonId: button.id,
-        position: button.index,
-        timestamp: new Date().toISOString(),
-        button: {
-          id: button.id,
-          deviceId: button.deviceId,
-          position: button.index,
-          title: button.label,
-          enabled: button.isEnabled,
-          backgroundColor: button.backgroundColor,
-          textColor: button.textColor,
-          fontSize: button.fontSize,
-        },
-        device: {
-          id: device.id,
-          name: device.name,
-          model: device.type,
-          connected: device.isConnected,
-          buttonCount: device.buttonCount,
-        },
-      };
-
-      // Send to webhooks (don't wait for completion)
-      this.webhookService
-        .sendButtonPressEvent(buttonPressEvent)
-        .catch((error) => {
-          logger.error('Failed to send webhook events', error as Error, {
-            deviceId,
-            buttonId: button.id,
-          });
-        });
-
-      const response = createSuccessResponse(
-        {
-          buttonId: button.id,
-          index: button.index,
-          action: button.action,
-        },
-        'Button pressed successfully',
-        req.requestId
-      );
-
-      res.status(HttpStatusCode.OK).json(response);
-    } catch (error) {
-      logger.error('Failed to press button', error as Error, {
-        requestId: req.requestId,
-        deviceId: req.params.deviceId,
-        buttonId: req.params.buttonId,
-      });
-
-      const errorResponse = createErrorResponse(
-        {
-          code: ApiErrorCode.INTERNAL_ERROR,
-          message: 'Failed to execute button press',
-          details: { error: (error as Error).message },
-        },
-        req.requestId
-      );
-
-      res.status(HttpStatusCode.INTERNAL_SERVER_ERROR).json(errorResponse);
-    }
-  }
-
-  /**
    * Update the physical StreamDeck device with button configuration
    */
   private async updatePhysicalButton(
@@ -793,43 +393,9 @@ export class ButtonController {
   }
 
   /**
-   * Create default buttons for a device
-   */
-  private createDefaultButtons(
-    deviceId: string,
-    buttonCount: number
-  ): Button[] {
-    const buttons: Button[] = [];
-
-    for (let i = 0; i < buttonCount; i++) {
-      buttons.push(this.createDefaultButton(deviceId, i));
-    }
-
-    return buttons;
-  }
-
-  /**
-   * Create a default button
-   */
-  private createDefaultButton(deviceId: string, index: number): Button {
-    return {
-      id: `btn-${deviceId}-${index}-${generateUUID()}`,
-      deviceId,
-      index,
-      label: `Button ${index + 1}`,
-      isEnabled: true,
-      backgroundColor: '#000000',
-      textColor: '#ffffff',
-      fontSize: 12,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-  }
-
-  /**
    * Transform internal button format to API response format
    */
-  private transformButtonToResponse(button: Button): any {
+  private transformButtonToResponse(button: any): any {
     return {
       id: button.id,
       deviceId: button.deviceId,
@@ -839,7 +405,18 @@ export class ButtonController {
       backgroundColor: button.backgroundColor,
       textColor: button.textColor,
       fontSize: button.fontSize,
-      action: button.action,
+      action: button.actionType
+        ? {
+            type: button.actionType,
+            payload: button.actionPayload
+              ? JSON.parse(button.actionPayload)
+              : {},
+            n8nWorkflowId: button.n8nWorkflowId,
+            webhookUrl: button.webhookUrl,
+            command: button.command,
+            hotkey: button.hotkey ? JSON.parse(button.hotkey) : undefined,
+          }
+        : undefined,
       enabled: button.isEnabled,
       createdAt: button.createdAt.toISOString(),
       updatedAt: button.updatedAt.toISOString(),
