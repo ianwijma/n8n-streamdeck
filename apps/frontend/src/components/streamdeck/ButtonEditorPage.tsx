@@ -1,0 +1,575 @@
+'use client';
+
+import React, { useState, useRef } from 'react';
+import { useForm } from 'react-hook-form';
+import {
+  ButtonResponse,
+  ButtonCreateRequest,
+  ButtonActionResponse,
+} from '@/types/api';
+import {
+  useUpdateButton,
+  useCreateButton,
+  useDeleteButton,
+  useUploadButtonIcon,
+} from '@/hooks/useButtons';
+import Icon from '@/components/ui/Icon';
+import Button from '@/components/ui/Button';
+
+interface ButtonConfigForm {
+  title?: string;
+  backgroundColor?: string;
+  textColor?: string;
+  fontSize?: number;
+  enabled: boolean;
+  actionType?:
+    | 'webhook'
+    | 'n8n-workflow'
+    | 'system-command'
+    | 'hotkey'
+    | 'text-input';
+  webhookUrl?: string;
+  webhookMethod?: 'GET' | 'POST' | 'PUT' | 'DELETE';
+  webhookHeaders?: string;
+  webhookBody?: string;
+  n8nWorkflowId?: string;
+  n8nWebhookUrl?: string;
+  n8nPayload?: string;
+  systemCommand?: string;
+  systemArgs?: string;
+  hotkeyKeys?: string;
+  textInput?: string;
+}
+
+interface ButtonEditorPageProps {
+  deviceId: string;
+  button: ButtonResponse | null;
+  position: number;
+  onClose: () => void;
+  onSave?: (button: ButtonResponse) => void;
+}
+
+export default function ButtonEditorPage({
+  deviceId,
+  button,
+  position,
+  onClose,
+  onSave,
+}: ButtonEditorPageProps) {
+  const [iconFile, setIconFile] = useState<File | null>(null);
+  const [iconPreview, setIconPreview] = useState<string | null>(
+    button?.icon || null
+  );
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const updateButton = useUpdateButton();
+  const createButton = useCreateButton();
+  const deleteButton = useDeleteButton();
+  const uploadIcon = useUploadButtonIcon();
+
+  const {
+    register,
+    handleSubmit,
+    watch,
+    formState: { errors, isSubmitting },
+  } = useForm<ButtonConfigForm>({
+    defaultValues: {
+      title: button?.title || '',
+      backgroundColor: button?.backgroundColor || '#000000',
+      textColor: button?.textColor || '#ffffff',
+      fontSize: button?.fontSize || 12,
+      enabled: button?.enabled ?? true,
+      actionType: button?.action?.type || 'webhook',
+      webhookUrl:
+        button?.action?.type === 'webhook'
+          ? (button.action.config as any)?.url || ''
+          : '',
+      webhookMethod:
+        button?.action?.type === 'webhook'
+          ? (button.action.config as any)?.method || 'POST'
+          : 'POST',
+      webhookHeaders:
+        button?.action?.type === 'webhook'
+          ? JSON.stringify(
+              (button.action.config as any)?.headers || {},
+              null,
+              2
+            )
+          : '{}',
+      webhookBody:
+        button?.action?.type === 'webhook'
+          ? (button.action.config as any)?.body || ''
+          : '',
+      n8nWorkflowId:
+        button?.action?.type === 'n8n-workflow'
+          ? (button.action.config as any)?.workflowId || ''
+          : '',
+      n8nWebhookUrl:
+        button?.action?.type === 'n8n-workflow'
+          ? (button.action.config as any)?.webhookUrl || ''
+          : '',
+      n8nPayload:
+        button?.action?.type === 'n8n-workflow'
+          ? JSON.stringify(
+              (button.action.config as any)?.payload || {},
+              null,
+              2
+            )
+          : '{}',
+      systemCommand:
+        button?.action?.type === 'system-command'
+          ? (button.action.config as any)?.command || ''
+          : '',
+      systemArgs:
+        button?.action?.type === 'system-command'
+          ? (button.action.config as any)?.args?.join(' ') || ''
+          : '',
+      hotkeyKeys:
+        button?.action?.type === 'hotkey'
+          ? (button.action.config as any)?.keys?.join('+') || ''
+          : '',
+      textInput:
+        button?.action?.type === 'text-input'
+          ? (button.action.config as any)?.text || ''
+          : '',
+    },
+  });
+
+  const actionType = watch('actionType');
+
+  const handleIconUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      setIconFile(file);
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setIconPreview(e.target?.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const buildActionConfig = (
+    data: ButtonConfigForm
+  ): ButtonActionResponse | undefined => {
+    if (!data.actionType) return undefined;
+
+    switch (data.actionType) {
+      case 'webhook':
+        return {
+          type: 'webhook',
+          config: {
+            url: data.webhookUrl || '',
+            method: data.webhookMethod || 'POST',
+            headers: data.webhookHeaders ? JSON.parse(data.webhookHeaders) : {},
+            body: data.webhookBody || '',
+          },
+        };
+      case 'n8n-workflow':
+        return {
+          type: 'n8n-workflow',
+          config: {
+            workflowId: data.n8nWorkflowId || '',
+            webhookUrl: data.n8nWebhookUrl || '',
+            payload: data.n8nPayload ? JSON.parse(data.n8nPayload) : {},
+          },
+        };
+      case 'system-command':
+        return {
+          type: 'system-command',
+          config: {
+            command: data.systemCommand || '',
+            args: data.systemArgs ? data.systemArgs.split(' ') : [],
+          },
+        };
+      case 'hotkey':
+        return {
+          type: 'hotkey',
+          config: {
+            keys: data.hotkeyKeys ? data.hotkeyKeys.split('+') : [],
+            modifiers: [],
+          },
+        };
+      case 'text-input':
+        return {
+          type: 'text-input',
+          config: {
+            text: data.textInput || '',
+          },
+        };
+      default:
+        return undefined;
+    }
+  };
+
+  const onSubmit = async (data: ButtonConfigForm) => {
+    try {
+      const config: ButtonCreateRequest = {
+        position,
+        title: data.title,
+        backgroundColor: data.backgroundColor,
+        textColor: data.textColor,
+        fontSize: data.fontSize,
+        enabled: data.enabled,
+        action: buildActionConfig(data),
+      };
+
+      let savedButton: ButtonResponse;
+
+      if (button) {
+        savedButton = await updateButton.mutateAsync({
+          deviceId,
+          buttonId: button.id,
+          config,
+        });
+      } else {
+        savedButton = await createButton.mutateAsync({
+          deviceId,
+          config,
+        });
+      }
+
+      if (iconFile) {
+        await uploadIcon.mutateAsync({
+          deviceId,
+          buttonId: savedButton.id,
+          file: iconFile,
+        });
+      }
+
+      onSave?.(savedButton);
+      onClose();
+    } catch (error) {
+      console.error('Failed to save button:', error);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (
+      button &&
+      window.confirm('Are you sure you want to delete this button?')
+    ) {
+      try {
+        await deleteButton.mutateAsync({
+          deviceId,
+          buttonId: button.id,
+        });
+        onClose();
+      } catch (error) {
+        console.error('Failed to delete button:', error);
+      }
+    }
+  };
+
+  return (
+    <div className="max-w-4xl mx-auto">
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
+        {/* Basic Settings */}
+        <div className="bg-white shadow rounded-lg p-6">
+          <h3 className="text-lg font-medium text-gray-900 mb-6">Appearance</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Title
+              </label>
+              <input
+                {...register('title')}
+                type="text"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                placeholder="Button title"
+              />
+              {errors.title && (
+                <p className="text-sm text-red-600 mt-1">
+                  {errors.title.message}
+                </p>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Font Size
+              </label>
+              <input
+                {...register('fontSize', { valueAsNumber: true })}
+                type="number"
+                min="8"
+                max="24"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Background Color
+              </label>
+              <input
+                {...register('backgroundColor')}
+                type="color"
+                className="w-full h-10 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Text Color
+              </label>
+              <input
+                {...register('textColor')}
+                type="color"
+                className="w-full h-10 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+          </div>
+
+          <div className="mt-6">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Icon
+            </label>
+            <div className="flex items-center space-x-4">
+              {iconPreview && (
+                <div className="w-16 h-16 bg-gray-100 rounded-lg flex items-center justify-center">
+                  <Icon src={iconPreview} alt="Icon preview" size="lg" />
+                </div>
+              )}
+              <Button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                variant="ghost"
+                size="sm"
+                className="text-indigo-600 bg-indigo-50 hover:bg-indigo-100"
+              >
+                {iconPreview ? 'Change Icon' : 'Upload Icon'}
+              </Button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleIconUpload}
+                className="hidden"
+              />
+            </div>
+          </div>
+
+          <div className="mt-6">
+            <label className="flex items-center">
+              <input
+                {...register('enabled')}
+                type="checkbox"
+                className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+              />
+              <span className="ml-2 text-sm text-gray-700">Enabled</span>
+            </label>
+          </div>
+        </div>
+
+        {/* Action Configuration */}
+        <div className="bg-white shadow rounded-lg p-6">
+          <h3 className="text-lg font-medium text-gray-900 mb-6">Action</h3>
+          <div className="space-y-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Action Type
+              </label>
+              <select
+                {...register('actionType')}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              >
+                <option value="">No Action</option>
+                <option value="webhook">Webhook</option>
+                <option value="n8n-workflow">N8N Workflow</option>
+                <option value="system-command">System Command</option>
+                <option value="hotkey">Hotkey</option>
+                <option value="text-input">Text Input</option>
+              </select>
+            </div>
+
+            {actionType === 'webhook' && (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    URL
+                  </label>
+                  <input
+                    {...register('webhookUrl')}
+                    type="url"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    placeholder="https://example.com/webhook"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Method
+                  </label>
+                  <select
+                    {...register('webhookMethod')}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  >
+                    <option value="GET">GET</option>
+                    <option value="POST">POST</option>
+                    <option value="PUT">PUT</option>
+                    <option value="DELETE">DELETE</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Headers (JSON)
+                  </label>
+                  <textarea
+                    {...register('webhookHeaders')}
+                    rows={3}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    placeholder='{"Content-Type": "application/json"}'
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Body
+                  </label>
+                  <textarea
+                    {...register('webhookBody')}
+                    rows={3}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    placeholder="Request body"
+                  />
+                </div>
+              </div>
+            )}
+
+            {actionType === 'n8n-workflow' && (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Workflow ID
+                  </label>
+                  <input
+                    {...register('n8nWorkflowId')}
+                    type="text"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    placeholder="workflow-id"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Webhook URL
+                  </label>
+                  <input
+                    {...register('n8nWebhookUrl')}
+                    type="url"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    placeholder="https://n8n.example.com/webhook/..."
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Payload (JSON)
+                  </label>
+                  <textarea
+                    {...register('n8nPayload')}
+                    rows={3}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    placeholder='{"key": "value"}'
+                  />
+                </div>
+              </div>
+            )}
+
+            {actionType === 'system-command' && (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Command
+                  </label>
+                  <input
+                    {...register('systemCommand')}
+                    type="text"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    placeholder="ls"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Arguments
+                  </label>
+                  <input
+                    {...register('systemArgs')}
+                    type="text"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    placeholder="-la /home"
+                  />
+                </div>
+              </div>
+            )}
+
+            {actionType === 'hotkey' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Hotkey Combination
+                </label>
+                <input
+                  {...register('hotkeyKeys')}
+                  type="text"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  placeholder="ctrl+c"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Use + to separate keys (e.g., ctrl+shift+a)
+                </p>
+              </div>
+            )}
+
+            {actionType === 'text-input' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Text to Type
+                </label>
+                <textarea
+                  {...register('textInput')}
+                  rows={3}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  placeholder="Text that will be typed when button is pressed"
+                />
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="bg-white shadow rounded-lg p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              {button && (
+                <Button
+                  type="button"
+                  onClick={handleDelete}
+                  loading={deleteButton.isPending}
+                  variant="danger"
+                  size="sm"
+                >
+                  {deleteButton.isPending ? 'Deleting...' : 'Delete Button'}
+                </Button>
+              )}
+            </div>
+            <div className="flex space-x-3">
+              <Button
+                type="button"
+                onClick={onClose}
+                variant="secondary"
+                size="sm"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                loading={isSubmitting}
+                variant="primary"
+                size="sm"
+              >
+                {isSubmitting ? 'Saving...' : 'Save Button'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      </form>
+    </div>
+  );
+}
