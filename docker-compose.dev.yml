@@ -124,7 +124,7 @@ services:
 
   # Development tools container
   devtools:
-    image: node:18-alpine
+    image: node:22-alpine
     container_name: n8n-streamdeck-devtools
     working_dir: /app
     volumes:

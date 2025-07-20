@@ -1,6 +1,6 @@
 # Multi-stage Dockerfile for N8N StreamDeck Frontend (Next.js)
 # Stage 1: Build dependencies and compile application
-FROM node:18-alpine AS builder
+FROM node:22-alpine AS builder
 
 # Set working directory
 WORKDIR /app
@@ -35,7 +35,7 @@ ENV NODE_ENV=${NODE_ENV}
 RUN pnpm --filter @n8n-streamdeck/frontend build
 
 # Stage 2: Production runtime
-FROM node:18-alpine AS runtime
+FROM node:22-alpine AS runtime
 
 # Install dumb-init for proper signal handling
 RUN apk add --no-cache dumb-init
