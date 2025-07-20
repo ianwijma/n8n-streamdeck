@@ -1,0 +1,288 @@
+/api/devices:
+  get:
+    tags:
+      - Devices
+    summary: List all StreamDeck devices
+    description: Retrieve a list of all connected and available StreamDeck devices
+    security:
+      - bearerAuth: []
+    responses:
+      '200':
+        description: Devices retrieved successfully
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                success:
+                  type: boolean
+                  example: true
+                data:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/Device'
+                timestamp:
+                  type: string
+                  format: date-time
+      '401':
+        $ref: '#/components/responses/UnauthorizedError'
+      '500':
+        $ref: '#/components/responses/InternalServerError'
+
+/api/devices/{id}:
+  get:
+    tags:
+      - Devices
+    summary: Get device by ID
+    description: Retrieve detailed information about a specific StreamDeck device
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Device identifier
+        example: streamdeck_001
+    responses:
+      '200':
+        description: Device retrieved successfully
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                success:
+                  type: boolean
+                  example: true
+                data:
+                  $ref: '#/components/schemas/Device'
+                timestamp:
+                  type: string
+                  format: date-time
+      '401':
+        $ref: '#/components/responses/UnauthorizedError'
+      '404':
+        $ref: '#/components/responses/NotFoundError'
+      '500':
+        $ref: '#/components/responses/InternalServerError'
+  delete:
+    tags:
+      - Devices
+    summary: Disconnect device
+    description: Disconnect a StreamDeck device and release resources
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Device identifier
+        example: streamdeck_001
+    responses:
+      '200':
+        description: Device disconnected successfully
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                success:
+                  type: boolean
+                  example: true
+                message:
+                  type: string
+                  example: Device disconnected successfully
+                timestamp:
+                  type: string
+                  format: date-time
+      '401':
+        $ref: '#/components/responses/UnauthorizedError'
+      '404':
+        $ref: '#/components/responses/NotFoundError'
+      '500':
+        $ref: '#/components/responses/InternalServerError'
+
+/api/devices/{id}/connect:
+  post:
+    tags:
+      - Devices
+    summary: Connect to device
+    description: Establish connection to a StreamDeck device
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Device identifier
+        example: streamdeck_001
+    responses:
+      '200':
+        description: Device connected successfully
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                success:
+                  type: boolean
+                  example: true
+                message:
+                  type: string
+                  example: Device connected successfully
+                data:
+                  $ref: '#/components/schemas/Device'
+                timestamp:
+                  type: string
+                  format: date-time
+      '401':
+        $ref: '#/components/responses/UnauthorizedError'
+      '404':
+        $ref: '#/components/responses/NotFoundError'
+      '409':
+        description: Device already connected
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Error'
+      '500':
+        $ref: '#/components/responses/InternalServerError'
+
+/api/devices/{id}/status:
+  get:
+    tags:
+      - Devices
+    summary: Get device status
+    description: Retrieve current status and health information for a device
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Device identifier
+        example: streamdeck_001
+    responses:
+      '200':
+        description: Device status retrieved successfully
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                success:
+                  type: boolean
+                  example: true
+                data:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                      example: streamdeck_001
+                    connected:
+                      type: boolean
+                      example: true
+                    brightness:
+                      type: integer
+                      example: 80
+                    buttonStates:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          position:
+                            type: integer
+                            example: 0
+                          pressed:
+                            type: boolean
+                            example: false
+                          configured:
+                            type: boolean
+                            example: true
+                    lastActivity:
+                      type: string
+                      format: date-time
+                    uptime:
+                      type: number
+                      description: Device uptime in seconds
+                      example: 3600
+                timestamp:
+                  type: string
+                  format: date-time
+      '401':
+        $ref: '#/components/responses/UnauthorizedError'
+      '404':
+        $ref: '#/components/responses/NotFoundError'
+      '500':
+        $ref: '#/components/responses/InternalServerError'
+
+/api/devices/{id}/brightness:
+  put:
+    tags:
+      - Devices
+    summary: Update device brightness
+    description: Set the brightness level for a StreamDeck device
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Device identifier
+        example: streamdeck_001
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required:
+              - brightness
+            properties:
+              brightness:
+                type: integer
+                minimum: 0
+                maximum: 100
+                description: Brightness percentage (0-100)
+                example: 75
+    responses:
+      '200':
+        description: Brightness updated successfully
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                success:
+                  type: boolean
+                  example: true
+                message:
+                  type: string
+                  example: Brightness updated successfully
+                data:
+                  type: object
+                  properties:
+                    brightness:
+                      type: integer
+                      example: 75
+                timestamp:
+                  type: string
+                  format: date-time
+      '400':
+        $ref: '#/components/responses/ValidationError'
+      '401':
+        $ref: '#/components/responses/UnauthorizedError'
+      '404':
+        $ref: '#/components/responses/NotFoundError'
+      '500':
+        $ref: '#/components/responses/InternalServerError'

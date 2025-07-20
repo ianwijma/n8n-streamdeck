@@ -1,8 +1,10 @@
 import express, { Application } from 'express';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
+import swaggerUi from 'swagger-ui-express';
 import { Logger } from '@n8n-streamdeck/shared';
 import { config, validateConfig } from './config/environment';
+import { swaggerSpec } from './docs/swagger';
 
 // Middleware imports
 import { corsMiddleware } from './middleware/cors';
@@ -73,6 +75,23 @@ export const createApp = (): Application => {
   // Request logging middleware
   app.use(requestLoggingMiddleware);
 
+  // API Documentation (Swagger UI)
+  app.use(
+    '/api/docs',
+    swaggerUi.serve,
+    swaggerUi.setup(swaggerSpec, {
+      explorer: true,
+      customCss: '.swagger-ui .topbar { display: none }',
+      customSiteTitle: 'N8N StreamDeck API Documentation',
+    })
+  );
+
+  // OpenAPI JSON endpoint
+  app.get('/api/docs.json', (_req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    res.send(swaggerSpec);
+  });
+
   // Health check endpoint (before other routes for quick access)
   app.use('/health', healthRoutes);
   app.use('/api/health', healthRoutes);
@@ -120,12 +139,14 @@ export const createApp = (): Application => {
       timestamp: new Date().toISOString(),
       endpoints: {
         health: '/health',
+        documentation: '/api/docs',
         api: {
           auth: '/api/auth',
           devices: '/api/devices',
           buttons: '/api/buttons',
           config: '/api/config',
           health: '/api/health',
+          docs: '/api/docs.json',
         },
       },
     });

@@ -1,0 +1,39 @@
+/health:
+  get:
+    tags:
+      - Health
+    summary: Basic health check
+    description: Simple health check endpoint for load balancers and monitoring
+    responses:
+      '200':
+        description: Service is healthy
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HealthCheck'
+      '503':
+        description: Service is unhealthy
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HealthCheck'
+
+/api/health:
+  get:
+    tags:
+      - Health
+    summary: Detailed health check
+    description: Comprehensive health check with service status details
+    responses:
+      '200':
+        description: Service is healthy
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HealthCheck'
+      '503':
+        description: Service is unhealthy
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HealthCheck'
