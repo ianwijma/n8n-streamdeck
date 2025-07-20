@@ -11,13 +11,11 @@ const nextConfig = {
 
   // Performance optimizations
   experimental: {
-    // Disable CSS optimization for development builds to avoid critters dependency issue
-    optimizeCss: process.env.NODE_ENV === 'production',
+    // Disable CSS optimization to avoid issues with Tailwind
+    optimizeCss: false,
     optimizePackageImports: ['@tanstack/react-query', 'socket.io-client'],
     // Force dynamic rendering
     forceSwcTransforms: true,
-    // Disable static generation
-    isrMemoryCacheSize: 0,
   },
 
   // Skip build errors for problematic pages
@@ -32,21 +30,6 @@ const nextConfig = {
   distDir: '.next',
   poweredByHeader: false,
 
-  // Custom webpack config to handle build issues
-  webpack: (config, { dev, isServer }) => {
-    // Skip problematic static generation in production builds
-    if (!dev && !isServer) {
-      config.resolve.fallback = {
-        ...config.resolve.fallback,
-        fs: false,
-        path: false,
-        os: false,
-      };
-    }
-
-    return config;
-  },
-
   // Disable static generation completely in Docker
   ...(process.env.DOCKER_BUILD && {
     generateStaticParams: false,
@@ -59,7 +42,17 @@ const nextConfig = {
   },
 
   // Bundle optimization
-  webpack: (config, { dev }) => {
+  webpack: (config, { dev, isServer }) => {
+    // Skip problematic static generation in production builds
+    if (!dev && !isServer) {
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        fs: false,
+        path: false,
+        os: false,
+      };
+    }
+
     // Production optimizations
     if (!dev) {
       // Enable tree shaking
