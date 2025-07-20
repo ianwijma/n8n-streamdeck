@@ -65,4 +65,36 @@ router.post(
   })
 );
 
+// POST /api/devices/:deviceId/buttons/:buttonId/move - Move button to new position
+router.post(
+  '/:buttonId/move',
+  asyncHandler(async (req: Request, res: Response) => {
+    await buttonController.moveButton(req, res);
+  })
+);
+
+// POST /api/devices/:deviceId/buttons/:buttonId/swap - Swap two buttons
+router.post(
+  '/:buttonId/swap',
+  asyncHandler(async (req: Request, res: Response) => {
+    await buttonController.swapButtons(req, res);
+  })
+);
+
+// POST /api/devices/:deviceId/buttons/:buttonId/copy - Copy button to new position
+router.post(
+  '/:buttonId/copy',
+  asyncHandler(async (req: Request, res: Response) => {
+    await buttonController.copyButton(req, res);
+  })
+);
+
+// DELETE /api/devices/:deviceId/buttons - Clear all buttons
+router.delete(
+  '/',
+  asyncHandler(async (req: Request, res: Response) => {
+    await buttonController.clearAllButtons(req, res);
+  })
+);
+
 export default router;

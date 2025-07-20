@@ -64,6 +64,7 @@ export class ButtonRepository {
   async update(
     id: string,
     data: Partial<{
+      index: number;
       label: string;
       icon: string;
       iconData: Buffer;

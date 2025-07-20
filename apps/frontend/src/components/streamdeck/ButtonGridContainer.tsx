@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { DeviceResponse, ButtonResponse } from '@/types/api';
-import { useButtons, useUpdateButton } from '@/hooks/useButtons';
+import { useButtons, useMoveButton, useSwapButtons } from '@/hooks/useButtons';
 import { useRealTimeEvents } from '@/hooks/useRealTimeEvents';
 import ButtonGrid from './ButtonGrid';
 
@@ -20,7 +20,8 @@ export default function ButtonGridContainer({
   className = '',
 }: ButtonGridContainerProps) {
   const { data: buttons, isLoading, error } = useButtons(device.id);
-  const updateButton = useUpdateButton();
+  const moveButton = useMoveButton();
+  const swapButtons = useSwapButtons();
   const [pressedButtons, setPressedButtons] = useState<Set<number>>(new Set());
   const [recentlyModifiedButtons, setRecentlyModifiedButtons] = useState<
     Set<number>
@@ -72,23 +73,35 @@ export default function ButtonGridContainer({
     newButton: ButtonResponse | null
   ) => {
     try {
-      if (oldButton) {
-        await updateButton.mutateAsync({
+      // If both positions have buttons, swap them
+      if (oldButton && newButton) {
+        await swapButtons.mutateAsync({
+          deviceId: device.id,
+          buttonId1: oldButton.id,
+          buttonId2: newButton.id,
+        });
+        markButtonAsRecentlyModified(oldIndex);
+        markButtonAsRecentlyModified(newIndex);
+      }
+      // If only the source position has a button, move it to the target position
+      else if (oldButton && !newButton) {
+        await moveButton.mutateAsync({
           deviceId: device.id,
           buttonId: oldButton.id,
-          config: { position: newIndex },
+          newPosition: newIndex,
         });
         markButtonAsRecentlyModified(newIndex);
       }
-
-      if (newButton) {
-        await updateButton.mutateAsync({
+      // If only the target position has a button, move it to the source position
+      else if (!oldButton && newButton) {
+        await moveButton.mutateAsync({
           deviceId: device.id,
           buttonId: newButton.id,
-          config: { position: oldIndex },
+          newPosition: oldIndex,
         });
         markButtonAsRecentlyModified(oldIndex);
       }
+      // If neither position has a button, do nothing
     } catch (error) {
       console.error('Failed to reorder buttons:', error);
       throw error;

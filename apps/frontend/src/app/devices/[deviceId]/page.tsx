@@ -5,6 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import { useParams, useSearchParams } from 'next/navigation';
 import { useDevices } from '@/hooks/useDevices';
+import { useClearAllButtons } from '@/hooks/useButtons';
 import { ButtonResponse } from '@/types/api';
 import ButtonGridContainer from '@/components/streamdeck/ButtonGridContainer';
 import Button from '@/components/ui/Button';
@@ -21,9 +22,12 @@ export default function DevicePage() {
   const [recentlyModifiedPosition, setRecentlyModifiedPosition] = useState<
     number | undefined
   >();
+  const [isExporting, setIsExporting] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
 
   const { data: devices, isLoading: devicesLoading } = useDevices();
   const device = devices?.find((d) => d.id === deviceId);
+  const clearAllButtons = useClearAllButtons();
 
   // Check if we're returning from button configuration
   useEffect(() => {
@@ -94,6 +98,95 @@ export default function DevicePage() {
 
   const handleBackToDevices = () => {
     router.push('/devices');
+  };
+
+  const handleResetAllButtons = async () => {
+    if (
+      window.confirm(
+        'Are you sure you want to reset all buttons? This will clear all button configurations and cannot be undone.'
+      )
+    ) {
+      try {
+        await clearAllButtons.mutateAsync(deviceId);
+        // Show success message or refresh the page
+        window.location.reload();
+      } catch (error) {
+        console.error('Failed to reset buttons:', error);
+        alert('Failed to reset buttons. Please try again.');
+      }
+    }
+  };
+
+  const handleExportConfiguration = async () => {
+    setIsExporting(true);
+    try {
+      // For now, we'll export via the device service
+      // In a real implementation, you might want to create a specific export endpoint
+      const response = await fetch(`/api/devices/${deviceId}/export`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${device?.name || 'device'}-config.json`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+      } else {
+        throw new Error('Export failed');
+      }
+    } catch (error) {
+      console.error('Failed to export configuration:', error);
+      alert('Failed to export configuration. Please try again.');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleImportConfiguration = () => {
+    setIsImporting(true);
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (file) {
+        try {
+          const text = await file.text();
+          const config = JSON.parse(text);
+
+          // Send the configuration to the server
+          const response = await fetch(`/api/devices/${deviceId}/import`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(config),
+          });
+
+          if (response.ok) {
+            // Refresh the page to show the imported configuration
+            window.location.reload();
+          } else {
+            throw new Error('Import failed');
+          }
+        } catch (error) {
+          console.error('Failed to import configuration:', error);
+          alert(
+            'Failed to import configuration. Please check the file format and try again.'
+          );
+        }
+      }
+      setIsImporting(false);
+    };
+    input.click();
   };
 
   return (
@@ -188,14 +281,34 @@ export default function DevicePage() {
               Quick Actions
             </h3>
             <div className="space-y-3">
-              <Button variant="primary" size="sm" className="w-full">
-                Reset All Buttons
+              <Button
+                variant="primary"
+                size="sm"
+                className="w-full"
+                onClick={handleResetAllButtons}
+                loading={clearAllButtons.isPending}
+              >
+                {clearAllButtons.isPending
+                  ? 'Resetting...'
+                  : 'Reset All Buttons'}
               </Button>
-              <Button variant="secondary" size="sm" className="w-full">
-                Export Configuration
+              <Button
+                variant="secondary"
+                size="sm"
+                className="w-full"
+                onClick={handleExportConfiguration}
+                loading={isExporting}
+              >
+                {isExporting ? 'Exporting...' : 'Export Configuration'}
               </Button>
-              <Button variant="secondary" size="sm" className="w-full">
-                Import Configuration
+              <Button
+                variant="secondary"
+                size="sm"
+                className="w-full"
+                onClick={handleImportConfiguration}
+                loading={isImporting}
+              >
+                {isImporting ? 'Importing...' : 'Import Configuration'}
               </Button>
             </div>
           </div>

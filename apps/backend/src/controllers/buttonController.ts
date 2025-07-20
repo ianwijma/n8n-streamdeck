@@ -985,6 +985,394 @@ export class ButtonController {
   }
 
   /**
+   * POST /devices/:deviceId/buttons/:buttonId/move - Move button to new position
+   */
+  async moveButton(req: Request, res: Response): Promise<void> {
+    try {
+      const { deviceId, buttonId } = req.params;
+      const { position } = req.body;
+
+      if (!deviceId || !buttonId) {
+        const errorResponse = createErrorResponse(
+          {
+            code: ApiErrorCode.VALIDATION_ERROR,
+            message: 'Device ID and Button ID are required',
+          },
+          req.requestId
+        );
+        res.status(HttpStatusCode.BAD_REQUEST).json(errorResponse);
+        return;
+      }
+
+      if (typeof position !== 'number' || position < 0) {
+        const errorResponse = createErrorResponse(
+          {
+            code: ApiErrorCode.VALIDATION_ERROR,
+            message: 'Position must be a non-negative number',
+          },
+          req.requestId
+        );
+        res.status(HttpStatusCode.BAD_REQUEST).json(errorResponse);
+        return;
+      }
+
+      logger.info('Moving button', {
+        requestId: req.requestId,
+        deviceId,
+        buttonId,
+        newPosition: position,
+      });
+
+      // Get the button to move
+      const button = await this.buttonRepository.findById(buttonId);
+      if (!button) {
+        const errorResponse = createErrorResponse(
+          {
+            code: ApiErrorCode.NOT_FOUND,
+            message: `Button with ID '${buttonId}' not found`,
+          },
+          req.requestId
+        );
+        res.status(HttpStatusCode.NOT_FOUND).json(errorResponse);
+        return;
+      }
+
+      // Check if there's already a button at the target position
+      const targetButton = await this.buttonRepository.findByDeviceAndIndex(
+        deviceId,
+        position
+      );
+
+      // If there's a button at the target position, we need to swap them
+      if (targetButton) {
+        // Update both buttons' positions
+        await this.buttonRepository.update(button.id, { index: position });
+        await this.buttonRepository.update(targetButton.id, {
+          index: button.index,
+        });
+      } else {
+        // Just move the button to the new position
+        await this.buttonRepository.update(button.id, { index: position });
+      }
+
+      // Get the updated button
+      const updatedButton = await this.buttonRepository.findById(buttonId);
+
+      const response = createSuccessResponse(
+        this.transformButtonToResponse(updatedButton!),
+        'Button moved successfully',
+        req.requestId
+      );
+
+      res.status(HttpStatusCode.OK).json(response);
+    } catch (error) {
+      logger.error('Failed to move button', error as Error, {
+        requestId: req.requestId,
+        deviceId: req.params.deviceId,
+        buttonId: req.params.buttonId,
+      });
+
+      const errorResponse = createErrorResponse(
+        {
+          code: ApiErrorCode.INTERNAL_ERROR,
+          message: 'Failed to move button',
+          details: { error: (error as Error).message },
+        },
+        req.requestId
+      );
+
+      res.status(HttpStatusCode.INTERNAL_SERVER_ERROR).json(errorResponse);
+    }
+  }
+
+  /**
+   * POST /devices/:deviceId/buttons/:buttonId/swap - Swap two buttons
+   */
+  async swapButtons(req: Request, res: Response): Promise<void> {
+    try {
+      const { deviceId, buttonId } = req.params;
+      const { targetButtonId } = req.body;
+
+      if (!deviceId || !buttonId || !targetButtonId) {
+        const errorResponse = createErrorResponse(
+          {
+            code: ApiErrorCode.VALIDATION_ERROR,
+            message: 'Device ID, Button ID, and Target Button ID are required',
+          },
+          req.requestId
+        );
+        res.status(HttpStatusCode.BAD_REQUEST).json(errorResponse);
+        return;
+      }
+
+      logger.info('Swapping buttons', {
+        requestId: req.requestId,
+        deviceId,
+        buttonId,
+        targetButtonId,
+      });
+
+      // Get both buttons
+      const button1 = await this.buttonRepository.findById(buttonId);
+      const button2 = await this.buttonRepository.findById(targetButtonId);
+
+      if (!button1) {
+        const errorResponse = createErrorResponse(
+          {
+            code: ApiErrorCode.NOT_FOUND,
+            message: `Button with ID '${buttonId}' not found`,
+          },
+          req.requestId
+        );
+        res.status(HttpStatusCode.NOT_FOUND).json(errorResponse);
+        return;
+      }
+
+      if (!button2) {
+        const errorResponse = createErrorResponse(
+          {
+            code: ApiErrorCode.NOT_FOUND,
+            message: `Target button with ID '${targetButtonId}' not found`,
+          },
+          req.requestId
+        );
+        res.status(HttpStatusCode.NOT_FOUND).json(errorResponse);
+        return;
+      }
+
+      // Swap the positions
+      const tempIndex = button1.index;
+      await this.buttonRepository.update(button1.id, { index: button2.index });
+      await this.buttonRepository.update(button2.id, { index: tempIndex });
+
+      // Get the updated buttons
+      const updatedButton1 = await this.buttonRepository.findById(buttonId);
+      const updatedButton2 =
+        await this.buttonRepository.findById(targetButtonId);
+
+      const response = createSuccessResponse(
+        {
+          button1: this.transformButtonToResponse(updatedButton1!),
+          button2: this.transformButtonToResponse(updatedButton2!),
+        },
+        'Buttons swapped successfully',
+        req.requestId
+      );
+
+      res.status(HttpStatusCode.OK).json(response);
+    } catch (error) {
+      logger.error('Failed to swap buttons', error as Error, {
+        requestId: req.requestId,
+        deviceId: req.params.deviceId,
+        buttonId: req.params.buttonId,
+      });
+
+      const errorResponse = createErrorResponse(
+        {
+          code: ApiErrorCode.INTERNAL_ERROR,
+          message: 'Failed to swap buttons',
+          details: { error: (error as Error).message },
+        },
+        req.requestId
+      );
+
+      res.status(HttpStatusCode.INTERNAL_SERVER_ERROR).json(errorResponse);
+    }
+  }
+
+  /**
+   * POST /devices/:deviceId/buttons/:buttonId/copy - Copy button to new position
+   */
+  async copyButton(req: Request, res: Response): Promise<void> {
+    try {
+      const { deviceId, buttonId } = req.params;
+      const { targetPosition } = req.body;
+
+      if (!deviceId || !buttonId) {
+        const errorResponse = createErrorResponse(
+          {
+            code: ApiErrorCode.VALIDATION_ERROR,
+            message: 'Device ID and Button ID are required',
+          },
+          req.requestId
+        );
+        res.status(HttpStatusCode.BAD_REQUEST).json(errorResponse);
+        return;
+      }
+
+      if (typeof targetPosition !== 'number' || targetPosition < 0) {
+        const errorResponse = createErrorResponse(
+          {
+            code: ApiErrorCode.VALIDATION_ERROR,
+            message: 'Target position must be a non-negative number',
+          },
+          req.requestId
+        );
+        res.status(HttpStatusCode.BAD_REQUEST).json(errorResponse);
+        return;
+      }
+
+      logger.info('Copying button', {
+        requestId: req.requestId,
+        deviceId,
+        buttonId,
+        targetPosition,
+      });
+
+      // Get the source button
+      const sourceButton = await this.buttonRepository.findById(buttonId);
+      if (!sourceButton) {
+        const errorResponse = createErrorResponse(
+          {
+            code: ApiErrorCode.NOT_FOUND,
+            message: `Button with ID '${buttonId}' not found`,
+          },
+          req.requestId
+        );
+        res.status(HttpStatusCode.NOT_FOUND).json(errorResponse);
+        return;
+      }
+
+      // Check if there's already a button at the target position
+      const existingButton = await this.buttonRepository.findByDeviceAndIndex(
+        deviceId,
+        targetPosition
+      );
+
+      if (existingButton) {
+        // Update the existing button with the source button's configuration
+        const updatedButton = await this.buttonRepository.update(
+          existingButton.id,
+          {
+            label: sourceButton.label || undefined,
+            icon: sourceButton.icon || undefined,
+            iconData: sourceButton.iconData
+              ? Buffer.from(sourceButton.iconData)
+              : undefined,
+            actionType: sourceButton.actionType || undefined,
+            actionPayload: sourceButton.actionPayload || undefined,
+            n8nWorkflowId: sourceButton.n8nWorkflowId || undefined,
+            webhookUrl: sourceButton.webhookUrl || undefined,
+            command: sourceButton.command || undefined,
+            hotkey: sourceButton.hotkey || undefined,
+            isEnabled: sourceButton.isEnabled,
+            backgroundColor: sourceButton.backgroundColor || undefined,
+            textColor: sourceButton.textColor || undefined,
+            fontSize: sourceButton.fontSize || undefined,
+          }
+        );
+
+        const response = createSuccessResponse(
+          this.transformButtonToResponse(updatedButton),
+          'Button copied successfully',
+          req.requestId
+        );
+
+        res.status(HttpStatusCode.OK).json(response);
+      } else {
+        // Create a new button at the target position
+        const newButton = await this.buttonRepository.create({
+          deviceId,
+          index: targetPosition,
+          label: sourceButton.label || undefined,
+          icon: sourceButton.icon || undefined,
+          iconData: sourceButton.iconData
+            ? Buffer.from(sourceButton.iconData)
+            : undefined,
+          actionType: sourceButton.actionType || undefined,
+          actionPayload: sourceButton.actionPayload || undefined,
+          n8nWorkflowId: sourceButton.n8nWorkflowId || undefined,
+          webhookUrl: sourceButton.webhookUrl || undefined,
+          command: sourceButton.command || undefined,
+          hotkey: sourceButton.hotkey || undefined,
+          isEnabled: sourceButton.isEnabled,
+          backgroundColor: sourceButton.backgroundColor || undefined,
+          textColor: sourceButton.textColor || undefined,
+          fontSize: sourceButton.fontSize || undefined,
+        });
+
+        const response = createSuccessResponse(
+          this.transformButtonToResponse(newButton),
+          'Button copied successfully',
+          req.requestId
+        );
+
+        res.status(HttpStatusCode.CREATED).json(response);
+      }
+    } catch (error) {
+      logger.error('Failed to copy button', error as Error, {
+        requestId: req.requestId,
+        deviceId: req.params.deviceId,
+        buttonId: req.params.buttonId,
+      });
+
+      const errorResponse = createErrorResponse(
+        {
+          code: ApiErrorCode.INTERNAL_ERROR,
+          message: 'Failed to copy button',
+          details: { error: (error as Error).message },
+        },
+        req.requestId
+      );
+
+      res.status(HttpStatusCode.INTERNAL_SERVER_ERROR).json(errorResponse);
+    }
+  }
+
+  /**
+   * DELETE /devices/:deviceId/buttons - Clear all buttons
+   */
+  async clearAllButtons(req: Request, res: Response): Promise<void> {
+    try {
+      const { deviceId } = req.params;
+
+      if (!deviceId) {
+        const errorResponse = createErrorResponse(
+          {
+            code: ApiErrorCode.VALIDATION_ERROR,
+            message: 'Device ID is required',
+          },
+          req.requestId
+        );
+        res.status(HttpStatusCode.BAD_REQUEST).json(errorResponse);
+        return;
+      }
+
+      logger.info('Clearing all buttons', {
+        requestId: req.requestId,
+        deviceId,
+      });
+
+      // Delete all buttons for the device
+      const result = await this.buttonRepository.deleteByDeviceId(deviceId);
+
+      const response = createSuccessResponse(
+        { deletedCount: result.count },
+        `Cleared ${result.count} buttons successfully`,
+        req.requestId
+      );
+
+      res.status(HttpStatusCode.OK).json(response);
+    } catch (error) {
+      logger.error('Failed to clear all buttons', error as Error, {
+        requestId: req.requestId,
+        deviceId: req.params.deviceId,
+      });
+
+      const errorResponse = createErrorResponse(
+        {
+          code: ApiErrorCode.INTERNAL_ERROR,
+          message: 'Failed to clear all buttons',
+          details: { error: (error as Error).message },
+        },
+        req.requestId
+      );
+
+      res.status(HttpStatusCode.INTERNAL_SERVER_ERROR).json(errorResponse);
+    }
+  }
+
+  /**
    * Validate button action configuration
    */
   private isValidButtonAction(action: ButtonAction): boolean {
