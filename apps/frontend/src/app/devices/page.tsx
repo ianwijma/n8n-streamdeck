@@ -8,9 +8,10 @@ import { useRouter } from 'next/navigation';
 export const dynamic = 'force-dynamic';
 import { DeviceResponse, ButtonResponse } from '@/types/api';
 import DeviceList from '@/components/streamdeck/DeviceList';
-import ButtonGrid from '@/components/streamdeck/ButtonGrid';
+import ButtonGridContainer from '@/components/streamdeck/ButtonGridContainer';
 import ButtonEditor from '@/components/streamdeck/ButtonEditor';
 import Button from '@/components/ui/Button';
+import { useButtons } from '@/hooks/useButtons';
 
 export default function DevicesPage() {
   const { isAuthenticated, setupRequired, isLoading } = useAuth();
@@ -45,6 +46,9 @@ export default function DevicesPage() {
     position: number;
   } | null>(null);
 
+  // Fetch buttons for the selected device (for refetching after editor closes)
+  const { refetch: refetchButtons } = useButtons(selectedDevice?.id || '');
+
   const handleDeviceSelect = (device: DeviceResponse) => {
     setSelectedDevice(device);
   };
@@ -58,6 +62,8 @@ export default function DevicesPage() {
 
   const handleCloseEditor = () => {
     setEditingButton(null);
+    // Refetch buttons after closing editor to get updated data
+    refetchButtons();
   };
 
   const handleBackToDevices = () => {
@@ -128,7 +134,7 @@ export default function DevicesPage() {
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div className="lg:col-span-2">
-              <ButtonGrid
+              <ButtonGridContainer
                 device={selectedDevice}
                 onButtonClick={handleButtonClick}
               />
@@ -227,6 +233,8 @@ export default function DevicesPage() {
           onClose={handleCloseEditor}
           onSave={(button) => {
             console.log('Button saved:', button);
+            // Refetch buttons to update the grid
+            refetchButtons();
           }}
         />
       )}

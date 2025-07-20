@@ -86,10 +86,10 @@ const SortableButton = React.memo<SortableButtonProps>(
       <div
         ref={setNodeRef}
         style={style}
-        {...attributes}
-        {...listeners}
         className={buttonClassName}
         onClick={handleClick}
+        {...attributes}
+        {...listeners}
       >
         {button ? (
           <div className="w-full h-full flex flex-col items-center justify-center p-2">

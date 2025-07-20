@@ -2,10 +2,11 @@
 export * from './logger';
 export * from './image';
 export * from './uuid';
+export * from './streamdeck';
 
 // Additional utility functions
 export const sleep = (ms: number): Promise<void> => {
-  return new Promise(resolve => setTimeout(resolve, ms));
+  return new Promise((resolve) => setTimeout(resolve, ms));
 };
 
 export const retry = async <T>(
@@ -20,11 +21,11 @@ export const retry = async <T>(
       return await operation();
     } catch (error) {
       lastError = error as Error;
-      
+
       if (attempt === maxAttempts) {
         throw lastError;
       }
-      
+
       await sleep(delay * attempt); // Exponential backoff
     }
   }
@@ -37,7 +38,7 @@ export const debounce = <T extends (...args: any[]) => any>(
   wait: number
 ): ((...args: Parameters<T>) => void) => {
   let timeout: NodeJS.Timeout;
-  
+
   return (...args: Parameters<T>) => {
     clearTimeout(timeout);
     timeout = setTimeout(() => func(...args), wait);
@@ -49,12 +50,12 @@ export const throttle = <T extends (...args: any[]) => any>(
   limit: number
 ): ((...args: Parameters<T>) => void) => {
   let inThrottle: boolean;
-  
+
   return (...args: Parameters<T>) => {
     if (!inThrottle) {
       func(...args);
       inThrottle = true;
-      setTimeout(() => inThrottle = false, limit);
+      setTimeout(() => (inThrottle = false), limit);
     }
   };
 };
@@ -63,15 +64,15 @@ export const deepClone = <T>(obj: T): T => {
   if (obj === null || typeof obj !== 'object') {
     return obj;
   }
-  
+
   if (obj instanceof Date) {
     return new Date(obj.getTime()) as unknown as T;
   }
-  
+
   if (obj instanceof Array) {
-    return obj.map(item => deepClone(item)) as unknown as T;
+    return obj.map((item) => deepClone(item)) as unknown as T;
   }
-  
+
   if (typeof obj === 'object') {
     const cloned = {} as T;
     for (const key in obj) {
@@ -81,7 +82,7 @@ export const deepClone = <T>(obj: T): T => {
     }
     return cloned;
   }
-  
+
   return obj;
 };
 
@@ -94,7 +95,7 @@ export const omit = <T extends Record<string, any>, K extends keyof T>(
   keys: K[]
 ): Omit<T, K> => {
   const result = { ...obj };
-  keys.forEach(key => delete result[key]);
+  keys.forEach((key) => delete result[key]);
   return result;
 };
 
@@ -103,7 +104,7 @@ export const pick = <T extends Record<string, any>, K extends keyof T>(
   keys: K[]
 ): Pick<T, K> => {
   const result = {} as Pick<T, K>;
-  keys.forEach(key => {
+  keys.forEach((key) => {
     if (key in obj) {
       result[key] = obj[key];
     }
@@ -113,13 +114,13 @@ export const pick = <T extends Record<string, any>, K extends keyof T>(
 
 export const formatBytes = (bytes: number, decimals: number = 2): string => {
   if (bytes === 0) return '0 Bytes';
-  
+
   const k = 1024;
   const dm = decimals < 0 ? 0 : decimals;
   const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
-  
+
   const i = Math.floor(Math.log(bytes) / Math.log(k));
-  
+
   return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
 };
 
@@ -128,7 +129,7 @@ export const formatDuration = (ms: number): string => {
   const minutes = Math.floor(seconds / 60);
   const hours = Math.floor(minutes / 60);
   const days = Math.floor(hours / 24);
-  
+
   if (days > 0) return `${days}d ${hours % 24}h ${minutes % 60}m`;
   if (hours > 0) return `${hours}h ${minutes % 60}m ${seconds % 60}s`;
   if (minutes > 0) return `${minutes}m ${seconds % 60}s`;
@@ -136,12 +137,18 @@ export const formatDuration = (ms: number): string => {
   return `${ms}ms`;
 };
 
-export const parseEnvBoolean = (value: string | undefined, defaultValue: boolean = false): boolean => {
+export const parseEnvBoolean = (
+  value: string | undefined,
+  defaultValue: boolean = false
+): boolean => {
   if (!value) return defaultValue;
   return ['true', '1', 'yes', 'on'].includes(value.toLowerCase());
 };
 
-export const parseEnvNumber = (value: string | undefined, defaultValue: number = 0): number => {
+export const parseEnvNumber = (
+  value: string | undefined,
+  defaultValue: number = 0
+): number => {
   if (!value) return defaultValue;
   const parsed = parseInt(value, 10);
   return isNaN(parsed) ? defaultValue : parsed;
@@ -155,7 +162,10 @@ export const safeJsonParse = <T = any>(json: string, defaultValue: T): T => {
   }
 };
 
-export const safeJsonStringify = (obj: any, defaultValue: string = '{}'): string => {
+export const safeJsonStringify = (
+  obj: any,
+  defaultValue: string = '{}'
+): string => {
   try {
     return JSON.stringify(obj);
   } catch {
