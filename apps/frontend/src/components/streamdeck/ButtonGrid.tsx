@@ -61,11 +61,12 @@ const SortableButton = React.memo<SortableButtonProps>(
 
     const buttonClassName = useMemo(
       () => `
-    relative aspect-square bg-gray-900 rounded-lg border-2 border-gray-700 
-    cursor-pointer transition-all duration-150 hover:border-gray-500
-    ${isPressed ? 'scale-95 border-blue-500' : ''}
+    relative aspect-square bg-gray-800 rounded-lg border border-gray-600
+    cursor-pointer transition-all duration-150 hover:border-gray-400
+    ${isPressed ? 'scale-95 border-blue-400 shadow-lg shadow-blue-500/50' : ''}
     ${isDragging ? 'opacity-50' : ''}
-    ${button ? 'hover:shadow-lg' : 'hover:bg-gray-800'}
+    ${button ? 'hover:shadow-lg hover:bg-gray-700' : 'hover:bg-gray-700'}
+    w-16 h-16 min-w-[4rem] min-h-[4rem]
   `,
       [isPressed, isDragging, button]
     );
@@ -149,7 +150,7 @@ const SortableButton = React.memo<SortableButtonProps>(
           </div>
         )}
 
-        <div className="absolute top-1 left-1 text-xs text-gray-400 font-mono">
+        <div className="absolute top-0.5 left-0.5 text-[10px] text-gray-500 font-mono bg-gray-900/80 rounded px-1">
           {position + 1}
         </div>
       </div>
@@ -192,7 +193,6 @@ const ButtonGrid = React.memo<ButtonGridProps>(
         }),
       [device.buttonCount, buttonMap]
     );
-
     const handleDragEnd = useCallback(
       async (event: DragEndEvent) => {
         const { active, over } = event;
@@ -230,9 +230,22 @@ const ButtonGrid = React.memo<ButtonGridProps>(
     const gridStyle = useMemo(
       () => ({
         gridTemplateColumns: `repeat(${device.columns}, minmax(0, 1fr))`,
+        gridTemplateRows: `repeat(${device.rows}, minmax(0, 1fr))`,
+        gap: '8px',
       }),
-      [device.columns]
+      [device.columns, device.rows]
     );
+
+    const deviceContainerStyle = useMemo(() => {
+      // Adjust container styling based on device type
+      const isXL = device.buttonCount === 32;
+      const isMini = device.buttonCount === 6;
+
+      return {
+        padding: isXL ? '24px' : isMini ? '16px' : '20px',
+        borderRadius: isXL ? '24px' : '20px',
+      };
+    }, [device.buttonCount]);
 
     const sortableItems = useMemo(
       () => Array.from({ length: device.buttonCount }, (_, i) => i),
@@ -248,13 +261,29 @@ const ButtonGrid = React.memo<ButtonGridProps>(
             </h3>
             <p className="text-sm text-gray-500">Loading buttons...</p>
           </div>
-          <div className="grid gap-3" style={gridStyle}>
-            {Array.from({ length: device.buttonCount }).map((_, index) => (
-              <div
-                key={index}
-                className="aspect-square bg-gray-200 rounded-lg animate-pulse"
-              />
-            ))}
+          <div
+            className="inline-block bg-gray-900 shadow-2xl"
+            style={deviceContainerStyle}
+          >
+            <div className="bg-black rounded-xl p-4">
+              <div className="grid" style={gridStyle}>
+                {Array.from({ length: device.buttonCount }).map((_, index) => (
+                  <div
+                    key={index}
+                    className="w-16 h-16 bg-gray-600 rounded-lg animate-pulse"
+                  />
+                ))}
+              </div>
+            </div>
+            <div className="mt-4 text-center">
+              <div className="text-white text-sm font-medium">
+                {device.name}
+              </div>
+              <div className="text-gray-400 text-xs">Loading buttons...</div>
+              <div className="text-gray-500 text-[10px] mt-1">
+                Model: {device.model}
+              </div>
+            </div>
           </div>
         </div>
       );
@@ -310,25 +339,47 @@ const ButtonGrid = React.memo<ButtonGridProps>(
           </p>
         </div>
 
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          onDragEnd={handleDragEnd}
+        {/* StreamDeck Device Container */}
+        <div
+          className="inline-block bg-gray-900 shadow-2xl"
+          style={deviceContainerStyle}
         >
-          <SortableContext items={sortableItems} strategy={rectSortingStrategy}>
-            <div className="grid gap-3" style={gridStyle}>
-              {gridButtons.map((button, index) => (
-                <SortableButton
-                  key={index}
-                  button={button}
-                  position={index}
-                  isPressed={pressedButtons.has(index)}
-                  onClick={() => handleButtonClick(index)}
-                />
-              ))}
+          <div className="bg-black rounded-xl p-4">
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+            >
+              <SortableContext
+                items={sortableItems}
+                strategy={rectSortingStrategy}
+              >
+                <div className="grid" style={gridStyle}>
+                  {gridButtons.map((button, index) => (
+                    <SortableButton
+                      key={index}
+                      button={button}
+                      position={index}
+                      isPressed={pressedButtons.has(index)}
+                      onClick={() => handleButtonClick(index)}
+                    />
+                  ))}
+                </div>
+              </SortableContext>
+            </DndContext>
+          </div>
+
+          {/* Device Info */}
+          <div className="mt-4 text-center">
+            <div className="text-white text-sm font-medium">{device.name}</div>
+            <div className="text-gray-400 text-xs">
+              {device.columns}×{device.rows} • {device.buttonCount} buttons
             </div>
-          </SortableContext>
-        </DndContext>
+            <div className="text-gray-500 text-[10px] mt-1">
+              Model: {device.model}
+            </div>
+          </div>
+        </div>
 
         <div className="mt-4 text-xs text-gray-500">
           <p>• Click any button to configure its action and appearance</p>
