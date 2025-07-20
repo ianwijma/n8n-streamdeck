@@ -121,3 +121,6 @@ PERFORMANCE.md
 
 # Database files
 *.db
+
+# misc
+cookies.txt

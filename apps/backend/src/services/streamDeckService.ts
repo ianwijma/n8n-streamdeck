@@ -445,6 +445,61 @@ export class StreamDeckService extends EventEmitter {
   }
 
   /**
+   * Reset device to neutral state (clear all buttons)
+   */
+  async resetDeviceToNeutralState(deviceId: string): Promise<void> {
+    try {
+      const streamDeck = this.connectedDevices.get(deviceId);
+      if (!streamDeck) {
+        this.logger.warn('Device not connected, skipping reset', { deviceId });
+        return;
+      }
+
+      const device = this.deviceInfo.get(deviceId);
+      if (!device) {
+        this.logger.warn('Device not found, skipping reset', { deviceId });
+        return;
+      }
+
+      this.logger.info('Resetting device to neutral state', {
+        deviceId,
+        buttonCount: device.buttonCount,
+      });
+
+      // Clear all buttons in parallel
+      const clearPromises = Array.from(
+        { length: device.buttonCount },
+        (_, index) =>
+          this.clearButton(deviceId, index).catch((error) => {
+            this.logger.error(
+              'Failed to clear button during reset',
+              error as Error,
+              {
+                deviceId,
+                buttonIndex: index,
+              }
+            );
+          })
+      );
+
+      await Promise.all(clearPromises);
+
+      this.logger.info('Device reset to neutral state completed', {
+        deviceId,
+        buttonCount: device.buttonCount,
+      });
+    } catch (error) {
+      this.logger.error(
+        'Failed to reset device to neutral state',
+        error as Error,
+        {
+          deviceId,
+        }
+      );
+    }
+  }
+
+  /**
    * Disconnect all devices and cleanup
    */
   async shutdown(): Promise<void> {
@@ -455,6 +510,23 @@ export class StreamDeckService extends EventEmitter {
       clearTimeout(timer);
     }
     this.reconnectTimers.clear();
+
+    // Reset all connected devices to neutral state before disconnecting
+    const resetPromises = Array.from(this.connectedDevices.keys()).map(
+      async (deviceId) => {
+        try {
+          await this.resetDeviceToNeutralState(deviceId);
+        } catch (error) {
+          this.logger.error(
+            'Error resetting device during shutdown',
+            error as Error,
+            { deviceId }
+          );
+        }
+      }
+    );
+
+    await Promise.all(resetPromises);
 
     // Disconnect all devices
     const disconnectPromises = Array.from(this.connectedDevices.keys()).map(
