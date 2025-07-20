@@ -1,6 +1,9 @@
 'use client';
 
 import React, { useState } from 'react';
+
+// Disable static generation for this page
+export const dynamic = 'force-dynamic';
 import { DeviceResponse, ButtonResponse } from '@/types/api';
 import DeviceList from '@/components/streamdeck/DeviceList';
 import ButtonGrid from '@/components/streamdeck/ButtonGrid';

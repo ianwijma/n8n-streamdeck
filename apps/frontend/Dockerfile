@@ -30,6 +30,7 @@ RUN pnpm --filter @n8n-streamdeck/config build
 ARG NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=${NODE_ENV}
+ENV DOCKER_BUILD=1
 
 # Build frontend application
 RUN pnpm --filter @n8n-streamdeck/frontend build

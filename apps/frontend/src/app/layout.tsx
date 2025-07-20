@@ -1,6 +1,5 @@
 import './globals.css';
-import Layout from '@/components/ui/Layout';
-import QueryProvider from '@/components/providers/QueryProvider';
+import ClientProviders from '@/components/providers/ClientProviders';
 
 export default function RootLayout({
   children,
@@ -10,9 +9,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <QueryProvider>
-          <Layout>{children}</Layout>
-        </QueryProvider>
+        <ClientProviders>{children}</ClientProviders>
       </body>
     </html>
   );
