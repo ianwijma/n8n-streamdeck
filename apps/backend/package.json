@@ -5,7 +5,7 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
-    "dev": "tsx watch src/index.ts",
+    "dev": "CHOKIDAR_USEPOLLING=true tsx watch --ignore node_modules --ignore dist --ignore coverage --ignore .next --ignore build --ignore tmp --ignore temp --ignore .cache --ignore test-results --ignore e2e --ignore load-testing --ignore docs --ignore scripts --ignore .git src/index.ts",
     "start": "node dist/index.js",
     "start:test": "NODE_ENV=test node dist/index.js",
     "test": "jest",

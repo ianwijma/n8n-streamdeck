@@ -43,6 +43,37 @@ const nextConfig = {
 
   // Bundle optimization
   webpack: (config, { dev, isServer }) => {
+    // Exclude unnecessary directories from file watching in development
+    if (dev) {
+      config.watchOptions = {
+        ignored: [
+          '**/node_modules/**',
+          '**/.git/**',
+          '**/.next/**',
+          '**/dist/**',
+          '**/build/**',
+          '**/coverage/**',
+          '**/.nyc_output/**',
+          '**/tmp/**',
+          '**/temp/**',
+          '**/.cache/**',
+          '**/test-results/**',
+          '**/e2e/**',
+          '**/load-testing/**',
+          '**/docs/**',
+          '**/scripts/**',
+          '**/.storybook-out/**',
+          '**/storybook-static/**',
+          '**/*.log',
+          '**/*.tsbuildinfo',
+          '**/.DS_Store',
+          '**/Thumbs.db',
+        ],
+        aggregateTimeout: 300,
+        poll: 1000,
+      };
+    }
+
     // Skip problematic static generation in production builds
     if (!dev && !isServer) {
       config.resolve.fallback = {
