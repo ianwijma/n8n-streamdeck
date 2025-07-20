@@ -22,23 +22,9 @@ interface ButtonConfigForm {
   textColor?: string;
   fontSize?: number;
   enabled: boolean;
-  actionType?:
-    | 'webhook'
-    | 'n8n-workflow'
-    | 'system-command'
-    | 'hotkey'
-    | 'text-input';
-  webhookUrl?: string;
-  webhookMethod?: 'GET' | 'POST' | 'PUT' | 'DELETE';
-  webhookHeaders?: string;
-  webhookBody?: string;
   n8nWorkflowId?: string;
   n8nWebhookUrl?: string;
   n8nPayload?: string;
-  systemCommand?: string;
-  systemArgs?: string;
-  hotkeyKeys?: string;
-  textInput?: string;
 }
 
 interface ButtonEditorPageProps {
@@ -70,7 +56,6 @@ export default function ButtonEditorPage({
   const {
     register,
     handleSubmit,
-    watch,
     formState: { errors, isSubmitting },
   } = useForm<ButtonConfigForm>({
     defaultValues: {
@@ -79,27 +64,6 @@ export default function ButtonEditorPage({
       textColor: button?.textColor || '#ffffff',
       fontSize: button?.fontSize || 12,
       enabled: button?.enabled ?? true,
-      actionType: button?.action?.type || 'webhook',
-      webhookUrl:
-        button?.action?.type === 'webhook'
-          ? (button.action.config as any)?.url || ''
-          : '',
-      webhookMethod:
-        button?.action?.type === 'webhook'
-          ? (button.action.config as any)?.method || 'POST'
-          : 'POST',
-      webhookHeaders:
-        button?.action?.type === 'webhook'
-          ? JSON.stringify(
-              (button.action.config as any)?.headers || {},
-              null,
-              2
-            )
-          : '{}',
-      webhookBody:
-        button?.action?.type === 'webhook'
-          ? (button.action.config as any)?.body || ''
-          : '',
       n8nWorkflowId:
         button?.action?.type === 'n8n-workflow'
           ? (button.action.config as any)?.workflowId || ''
@@ -116,26 +80,8 @@ export default function ButtonEditorPage({
               2
             )
           : '{}',
-      systemCommand:
-        button?.action?.type === 'system-command'
-          ? (button.action.config as any)?.command || ''
-          : '',
-      systemArgs:
-        button?.action?.type === 'system-command'
-          ? (button.action.config as any)?.args?.join(' ') || ''
-          : '',
-      hotkeyKeys:
-        button?.action?.type === 'hotkey'
-          ? (button.action.config as any)?.keys?.join('+') || ''
-          : '',
-      textInput:
-        button?.action?.type === 'text-input'
-          ? (button.action.config as any)?.text || ''
-          : '',
     },
   });
-
-  const actionType = watch('actionType');
 
   const handleIconUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -152,54 +98,18 @@ export default function ButtonEditorPage({
   const buildActionConfig = (
     data: ButtonConfigForm
   ): ButtonActionResponse | undefined => {
-    if (!data.actionType) return undefined;
-
-    switch (data.actionType) {
-      case 'webhook':
-        return {
-          type: 'webhook',
-          config: {
-            url: data.webhookUrl || '',
-            method: data.webhookMethod || 'POST',
-            headers: data.webhookHeaders ? JSON.parse(data.webhookHeaders) : {},
-            body: data.webhookBody || '',
-          },
-        };
-      case 'n8n-workflow':
-        return {
-          type: 'n8n-workflow',
-          config: {
-            workflowId: data.n8nWorkflowId || '',
-            webhookUrl: data.n8nWebhookUrl || '',
-            payload: data.n8nPayload ? JSON.parse(data.n8nPayload) : {},
-          },
-        };
-      case 'system-command':
-        return {
-          type: 'system-command',
-          config: {
-            command: data.systemCommand || '',
-            args: data.systemArgs ? data.systemArgs.split(' ') : [],
-          },
-        };
-      case 'hotkey':
-        return {
-          type: 'hotkey',
-          config: {
-            keys: data.hotkeyKeys ? data.hotkeyKeys.split('+') : [],
-            modifiers: [],
-          },
-        };
-      case 'text-input':
-        return {
-          type: 'text-input',
-          config: {
-            text: data.textInput || '',
-          },
-        };
-      default:
-        return undefined;
+    // Always create an N8N workflow action if workflow ID is provided
+    if (data.n8nWorkflowId) {
+      return {
+        type: 'n8n-workflow',
+        config: {
+          workflowId: data.n8nWorkflowId,
+          webhookUrl: data.n8nWebhookUrl || '',
+          payload: data.n8nPayload ? JSON.parse(data.n8nPayload) : {},
+        },
+      };
     }
+    return undefined;
   };
 
   const onSubmit = async (data: ButtonConfigForm) => {
@@ -362,174 +272,103 @@ export default function ButtonEditorPage({
           </div>
         </div>
 
-        {/* Action Configuration */}
+        {/* N8N Workflow Configuration */}
         <div className="bg-white shadow rounded-lg p-6">
-          <h3 className="text-lg font-medium text-gray-900 mb-6">Action</h3>
+          <h3 className="text-lg font-medium text-gray-900 mb-6">
+            N8N Workflow
+          </h3>
           <div className="space-y-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Action Type
-              </label>
-              <select
-                {...register('actionType')}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              >
-                <option value="">No Action</option>
-                <option value="webhook">Webhook</option>
-                <option value="n8n-workflow">N8N Workflow</option>
-                <option value="system-command">System Command</option>
-                <option value="hotkey">Hotkey</option>
-                <option value="text-input">Text Input</option>
-              </select>
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div className="flex items-start">
+                <div className="flex-shrink-0">
+                  <svg
+                    className="h-5 w-5 text-blue-400"
+                    viewBox="0 0 20 20"
+                    fill="currentColor"
+                  >
+                    <path
+                      fillRule="evenodd"
+                      d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                </div>
+                <div className="ml-3">
+                  <h4 className="text-sm font-medium text-blue-800">
+                    StreamDeck Button → N8N Workflow
+                  </h4>
+                  <p className="text-sm text-blue-700 mt-1">
+                    Configure this button to trigger an N8N workflow when
+                    pressed. You'll need the workflow ID and webhook URL from
+                    your N8N instance.
+                  </p>
+                </div>
+              </div>
             </div>
 
-            {actionType === 'webhook' && (
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    URL
-                  </label>
-                  <input
-                    {...register('webhookUrl')}
-                    type="url"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    placeholder="https://example.com/webhook"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Method
-                  </label>
-                  <select
-                    {...register('webhookMethod')}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  >
-                    <option value="GET">GET</option>
-                    <option value="POST">POST</option>
-                    <option value="PUT">PUT</option>
-                    <option value="DELETE">DELETE</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Headers (JSON)
-                  </label>
-                  <textarea
-                    {...register('webhookHeaders')}
-                    rows={3}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    placeholder='{"Content-Type": "application/json"}'
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Body
-                  </label>
-                  <textarea
-                    {...register('webhookBody')}
-                    rows={3}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    placeholder="Request body"
-                  />
-                </div>
-              </div>
-            )}
-
-            {actionType === 'n8n-workflow' && (
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Workflow ID
-                  </label>
-                  <input
-                    {...register('n8nWorkflowId')}
-                    type="text"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    placeholder="workflow-id"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Webhook URL
-                  </label>
-                  <input
-                    {...register('n8nWebhookUrl')}
-                    type="url"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    placeholder="https://n8n.example.com/webhook/..."
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Payload (JSON)
-                  </label>
-                  <textarea
-                    {...register('n8nPayload')}
-                    rows={3}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    placeholder='{"key": "value"}'
-                  />
-                </div>
-              </div>
-            )}
-
-            {actionType === 'system-command' && (
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Command
-                  </label>
-                  <input
-                    {...register('systemCommand')}
-                    type="text"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    placeholder="ls"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Arguments
-                  </label>
-                  <input
-                    {...register('systemArgs')}
-                    type="text"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    placeholder="-la /home"
-                  />
-                </div>
-              </div>
-            )}
-
-            {actionType === 'hotkey' && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Hotkey Combination
-                </label>
-                <input
-                  {...register('hotkeyKeys')}
-                  type="text"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  placeholder="ctrl+c"
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Use + to separate keys (e.g., ctrl+shift+a)
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Workflow ID <span className="text-red-500">*</span>
+              </label>
+              <input
+                {...register('n8nWorkflowId', {
+                  required: 'Workflow ID is required',
+                })}
+                type="text"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                placeholder="e.g., 123 or my-workflow-name"
+              />
+              {errors.n8nWorkflowId && (
+                <p className="text-sm text-red-600 mt-1">
+                  {errors.n8nWorkflowId.message}
                 </p>
-              </div>
-            )}
+              )}
+              <p className="text-xs text-gray-500 mt-1">
+                The unique identifier for your N8N workflow
+              </p>
+            </div>
 
-            {actionType === 'text-input' && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Text to Type
-                </label>
-                <textarea
-                  {...register('textInput')}
-                  rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  placeholder="Text that will be typed when button is pressed"
-                />
-              </div>
-            )}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Webhook URL <span className="text-red-500">*</span>
+              </label>
+              <input
+                {...register('n8nWebhookUrl', {
+                  required: 'Webhook URL is required',
+                  pattern: {
+                    value: /^https?:\/\/.+/,
+                    message: 'Please enter a valid URL',
+                  },
+                })}
+                type="url"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                placeholder="https://your-n8n-instance.com/webhook/streamdeck-trigger"
+              />
+              {errors.n8nWebhookUrl && (
+                <p className="text-sm text-red-600 mt-1">
+                  {errors.n8nWebhookUrl.message}
+                </p>
+              )}
+              <p className="text-xs text-gray-500 mt-1">
+                The webhook URL that will trigger your N8N workflow
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Payload (JSON)
+              </label>
+              <textarea
+                {...register('n8nPayload')}
+                rows={4}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-sm"
+                placeholder='{"deviceId": "streamdeck-001", "buttonPosition": 1, "timestamp": "2024-01-01T00:00:00Z"}'
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Optional JSON payload to send with the webhook request. Leave
+                empty for default payload.
+              </p>
+            </div>
           </div>
         </div>
 

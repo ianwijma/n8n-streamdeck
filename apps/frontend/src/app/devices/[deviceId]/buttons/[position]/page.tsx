@@ -106,8 +106,8 @@ export default function ButtonConfigurationPage() {
             Configure Button {position + 1}
           </h1>
           <p className="text-gray-600 mt-2">
-            Configure the appearance and action for button {position + 1} on{' '}
-            {device.name}
+            Configure button {position + 1} on {device.name} to trigger an N8N
+            workflow
           </p>
         </div>
 
