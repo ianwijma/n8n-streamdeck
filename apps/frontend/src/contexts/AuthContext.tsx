@@ -102,20 +102,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const checkSetup = useCallback(async () => {
     try {
       dispatch({ type: 'SET_LOADING', payload: true });
-      const { setupRequired } = await authService.checkSetup();
-      dispatch({ type: 'SET_SETUP_REQUIRED', payload: setupRequired });
+      const response = await authService.checkSetup();
 
-      if (!setupRequired) {
-        // Try to get current user profile
-        try {
-          const user = await authService.getProfile();
-          dispatch({ type: 'SET_USER', payload: user });
-        } catch (error) {
-          // User not authenticated, but setup is complete
-          dispatch({ type: 'SET_USER', payload: null });
+      if (
+        response &&
+        typeof response === 'object' &&
+        'setupRequired' in response
+      ) {
+        const { setupRequired } = response;
+        dispatch({ type: 'SET_SETUP_REQUIRED', payload: setupRequired });
+
+        if (!setupRequired) {
+          // Try to get current user profile
+          try {
+            const user = await authService.getProfile();
+            dispatch({ type: 'SET_USER', payload: user });
+          } catch (error) {
+            // User not authenticated, but setup is complete
+            dispatch({ type: 'SET_USER', payload: null });
+          }
         }
+      } else {
+        // If response is invalid, assume setup is required
+        dispatch({ type: 'SET_SETUP_REQUIRED', payload: true });
       }
     } catch (error) {
+      // If setup check fails, assume setup is required
+      dispatch({ type: 'SET_SETUP_REQUIRED', payload: true });
       handleAuthError(error);
     }
   }, [handleAuthError]);
