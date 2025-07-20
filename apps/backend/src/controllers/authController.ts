@@ -51,9 +51,7 @@ export class AuthController {
   ];
 
   // Refresh token validation rules
-  static refreshTokenValidation = [
-    body('refreshToken').notEmpty().withMessage('Refresh token is required'),
-  ];
+  static refreshTokenValidation = [];
 
   setup = async (req: Request, res: Response): Promise<void> => {
     try {
@@ -137,16 +135,6 @@ export class AuthController {
 
   refreshToken = async (req: Request, res: Response): Promise<void> => {
     try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        res.status(400).json({
-          success: false,
-          error: 'Validation failed',
-          details: errors.array(),
-        });
-        return;
-      }
-
       // Try to get refresh token from body or cookie
       const refreshTokenData: RefreshTokenRequest = {
         refreshToken: req.body.refreshToken || req.cookies.refreshToken,
@@ -536,14 +524,14 @@ export class AuthController {
     res.cookie('accessToken', accessToken, {
       httpOnly: true,
       secure: isProduction,
-      sameSite: 'strict',
+      sameSite: isProduction ? 'strict' : 'lax',
       maxAge: accessTokenMaxAge,
     });
 
     res.cookie('refreshToken', refreshToken, {
       httpOnly: true,
       secure: isProduction,
-      sameSite: 'strict',
+      sameSite: isProduction ? 'strict' : 'lax',
       maxAge: refreshTokenMaxAge,
     });
   }

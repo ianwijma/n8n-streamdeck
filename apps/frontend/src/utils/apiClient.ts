@@ -48,6 +48,7 @@ class ApiClient {
     this.client = axios.create({
       baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001',
       timeout: 30000,
+      withCredentials: true, // Enable sending cookies with requests
       headers: {
         'Content-Type': 'application/json',
       },
@@ -60,12 +61,6 @@ class ApiClient {
     // Request interceptor
     this.client.interceptors.request.use(
       (config) => {
-        // Add auth token if available
-        const token = this.getAuthToken();
-        if (token) {
-          config.headers.Authorization = `Bearer ${token}`;
-        }
-
         // Add request timestamp for debugging
         config.metadata = { startTime: new Date() };
 
@@ -105,14 +100,6 @@ class ApiClient {
         return Promise.reject(this.handleError(error));
       }
     );
-  }
-
-  private getAuthToken(): string | null {
-    // Get token from localStorage or other storage
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('auth_token');
-    }
-    return null;
   }
 
   private handleError(error: AxiosError): ApiError {
@@ -239,20 +226,6 @@ class ApiClient {
   // Health check
   async healthCheck(): Promise<{ status: string; timestamp: string }> {
     return this.get('/api/health');
-  }
-
-  // Set auth token
-  setAuthToken(token: string) {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('auth_token', token);
-    }
-  }
-
-  // Clear auth token
-  clearAuthToken() {
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('auth_token');
-    }
   }
 }
 

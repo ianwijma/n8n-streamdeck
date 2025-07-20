@@ -77,6 +77,7 @@ class ApiClient {
     this.axiosInstance = axios.create({
       baseURL: config.baseURL || '/api',
       timeout: config.timeout || 30000,
+      withCredentials: true, // Enable sending cookies with requests
       headers: {
         'Content-Type': 'application/json',
       },
@@ -101,12 +102,6 @@ class ApiClient {
         const requestId = `req_${Date.now()}_${Math.random().toString(36).substring(2)}`;
         config.headers = config.headers || {};
         (config.headers as any)['X-Request-ID'] = requestId;
-
-        // Add authentication token if available
-        const token = this.getAuthToken();
-        if (token) {
-          (config.headers as any).Authorization = `Bearer ${token}`;
-        }
 
         // Performance monitoring
         if (this.enablePerformanceMonitoring) {
@@ -172,14 +167,6 @@ class ApiClient {
         this.isOnline = false;
       });
     }
-  }
-
-  private getAuthToken(): string | null {
-    // This would typically come from your auth context or localStorage
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('auth_token');
-    }
-    return null;
   }
 
   private defaultRetryCondition(error: AxiosError): boolean {

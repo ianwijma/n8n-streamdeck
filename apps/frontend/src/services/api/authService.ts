@@ -67,7 +67,7 @@ export class AuthService {
   }
 
   private async performRefresh(): Promise<void> {
-    await apiClient.post<RefreshTokenResponse>('/api/auth/refresh');
+    await apiClient.post<RefreshTokenResponse>('/api/auth/refresh', {});
     // Tokens are handled via HTTP-only cookies, so no need to store them
   }
 

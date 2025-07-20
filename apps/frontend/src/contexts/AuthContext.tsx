@@ -260,7 +260,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
 
     initializeAuth();
-  }, []); // Only run once on mount
+  }, [handleAuthError]); // Only run once on mount
 
   // Start token refresh if user is authenticated
   useEffect(() => {
